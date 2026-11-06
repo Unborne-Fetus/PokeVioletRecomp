@@ -9,6 +9,7 @@ on:
       - "tools/violet/graphics_triage.ps1"
       - "tools/violet/graphics_capture_report.ps1"
       - "tools/violet/graphics_capture_launch.ps1"
+      - "tools/violet/graphics_probe_launch.ps1"
       - "runtime/nvn/objects.c"
       - "runtime/ui/launcher.mm"
       - "tools/violet/run.ps1"
@@ -84,6 +85,20 @@ jobs:
           $capture = ./tools/violet/graphics_capture_launch.ps1 -Frames 3 -DryRun | Out-String
           if ($capture -notmatch '3 consecutive rendering frames') { throw 'F9 capture launcher did not select three frames.' }
           if ($env:LARECOMP_DEBUG_FRAMES) { throw 'F9 capture launcher leaked an environment variable.' }
+      - name: Validate per-draw striped-pixel probe and environment cleanup
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/graphics_probe_launch.ps1'), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+          $out = ./tools/violet/graphics_probe_launch.ps1 -X 400 -Y 780 -Frames 2 -DryRun | Out-String
+          if ($out -notmatch '400,780' -or $out -notmatch '2 frames') {
+            throw "Probe launcher did not select configured scene pixel: $out"
+          }
+          if ($env:LARECOMP_PROBE -or $env:LARECOMP_DEBUG_FRAMES) {
+            throw 'Probe launcher leaked temporary environment variables.'
+          }
       - name: Test F9 render-pass contact-sheet archive with synthetic images
         shell: pwsh
         run: |
