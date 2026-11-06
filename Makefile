@@ -44,7 +44,7 @@ GENFLAGS := $(GENOPT) -fno-strict-aliasing -Wno-return-type -Wno-unused-label -f
 # the app itself holds none of it
 # (strip: with no generated code the space between the two would be all that's left, and $(if) takes a lone space as
 # true. No comment after the value: make keeps the spaces before it)
-GEN_SRC  := $(strip $(wildcard $(GEN)/main/*.c) $(wildcard $(GEN)/sdk/*.c))
+GEN_SRC  := $(strip $(wildcard $(GEN)/main/*.c) $(wildcard $(GEN)/sdk/*.c) $(wildcard $(GEN)/subsdk0/*.c))
 GEN_OBJ  := $(patsubst %.c,$(B)/obj/%.o,$(patsubst $(GEN)/%,%,$(GEN_SRC))) $(B)/obj/tools/gamelib_entry.o
 RT_SRC   := $(wildcard runtime/*.c runtime/*.cpp) $(wildcard runtime/hle/*.c) $(wildcard runtime/services/*.c) \
             $(wildcard runtime/nvn/*.c) $(wildcard runtime/nvn/maxwell/*.c) runtime/platform/$(PLATFORM).c
@@ -143,7 +143,7 @@ $(B)/obj/%.o: $(GEN)/%.c runtime/cpu.h runtime/simd.h runtime/simd_fp.h
 
 $(B)/obj/tools/gamelib_entry.o: tools/gamelib_entry.c $(GAMELIB_SRCS) $(wildcard $(GEN)/main/main_build_id.txt)
 	@mkdir -p $(dir $@)
-	$(CC) $(GENFLAGS) -DGAMELIB_ID='"$(GAMELIB_FULL_ID)"' -c $< -o $@
+	$(CC) $(GENFLAGS) $(if $(wildcard $(GEN)/subsdk0/subsdk0_table.c),-DRECOMP_HAS_SUBSDK0=1) -DGAMELIB_ID='"$(GAMELIB_FULL_ID)"' -c $< -o $@
 # (Makefile too: GAMELIB_ID hashes the flags, so a flags change - GENOPT - must rebuild the loader's copy of the id, as
 # it does gamebuild.o's; it didn't, and the start screen's build and the loader disagreed: the old library loaded)
 $(B)/rt/gamelib.o: $(GAMELIB_SRCS) Makefile
@@ -244,9 +244,14 @@ PY := $(firstword $(wildcard tools/venv/bin/python) $(wildcard tools/venv/Script
 
 # EXEFS: the game's exefs folder (another version's: with its own GEN and B)
 EXEFS ?= extracted/exefs
+GAME_MODE ?= auto
+GEN_GAME_FLAG := $(if $(filter violet,$(GAME_MODE)),--game violet,)
 gen:
-	cd tools && ../$(PY) gen.py sdk ../$(EXEFS)/sdk 0x7008000000 ../$(GEN)/sdk --hle ../runtime/hle/hle_symbols.txt $(GENSIMD)
-	cd tools && ../$(PY) gen.py main ../$(EXEFS)/main 0x7000000000 ../$(GEN)/main $(GENSIMD)
+	cd tools && ../$(PY) gen.py sdk ../$(EXEFS)/sdk 0x7008000000 ../$(GEN)/sdk --hle ../runtime/hle/hle_symbols.txt $(GENSIMD) $(GEN_GAME_FLAG)
+	cd tools && ../$(PY) gen.py main ../$(EXEFS)/main 0x7000000000 ../$(GEN)/main $(GENSIMD) $(GEN_GAME_FLAG)
+ifneq ($(wildcard $(EXEFS)/subsdk0),)
+	cd tools && ../$(PY) gen.py subsdk0 ../$(EXEFS)/subsdk0 0x7004000000 ../$(GEN)/subsdk0 $(GENSIMD) --game violet
+endif
 
 gen-objs: $(GEN_OBJ)
 
