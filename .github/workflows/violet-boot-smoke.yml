@@ -1,0 +1,29 @@
+name: Violet boot-log regression tests
+
+on:
+  push:
+    branches: [pokemon-za]
+    paths:
+      - 'runtime/kernel.c'
+      - 'runtime/services/am.c'
+      - 'runtime/services/bluetooth.c'
+      - 'tools/violet/boot_triage.py'
+      - 'tests/test_violet_boot_triage.py'
+      - '.github/workflows/violet-boot-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  boot-log-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax-check boot triage
+        run: python -m py_compile tools/violet/boot_triage.py
+      - name: Check abort-log regressions
+        run: python -m unittest discover -s tests -p 'test_violet_boot_triage.py' -v
