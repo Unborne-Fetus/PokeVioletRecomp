@@ -129,6 +129,9 @@ static void init(void) {
 }
 
 void rando_init(void) {
+    // LAS randomizer seeds contain Link's Awakening code/data offsets.
+    // Never interpret them against a Violet or Z-A module.
+    if (!game_version()) return;
     if (__atomic_load_n(&g_inited, __ATOMIC_ACQUIRE)) return;
     pthread_mutex_lock(&g_init_lock);
     if (!g_inited) { init(); __atomic_store_n(&g_inited, 1, __ATOMIC_RELEASE); }
@@ -142,7 +145,7 @@ void rando_boot(void) {
     nwords = 0;
     g_active = false;
     g_seed_dir[0] = 0;
-    init();
+    if (game_version()) init();  // LA only; never patch Violet's executable.
     __atomic_store_n(&g_inited, 1, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&g_init_lock);
 }
