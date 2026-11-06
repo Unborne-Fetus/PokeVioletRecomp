@@ -137,6 +137,9 @@ static bool trade_shown(void) {
 
 extern "C" int rt_tunic_upgrades(void);  // runtime/hle/qol.c
 extern "C" bool inventory_overlay_wanted(void) {
+    // No Link's Awakening inventory layout or LIVE_SAVE exists in Violet.
+    // In particular companion_card() would call pets_current() and read 0x555D.
+    if (!g_game_is_la) return false;
     int have, need;
     return (trade_shown() || pets_ghost_state() >= 0 || companion_card() || rt_tunic_upgrades() || triforce_counts(&have, &need)) &&
            rando_seed_dir() && items_page_shown();
@@ -467,6 +470,7 @@ static void souls_column(ImDrawList *dl, ImFont *font, float ox, float oy, float
 }
 
 extern "C" void inventory_overlay_draw(ImVec2 display, ImFont *font) {
+    if (!g_game_is_la) return;
     // the game's UI is drawn in a centred 16:9 box; place the panel in its free strip above the bottom rule
     float bw = fminf(display.x, display.y * 16.0f / 9.0f), bh = bw * 9.0f / 16.0f;
     float ox = (display.x - bw) * 0.5f, oy = (display.y - bh) * 0.5f;
