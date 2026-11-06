@@ -1,0 +1,39 @@
+name: Violet recomp foundations
+on:
+  push:
+    branches: [violet-port]
+  pull_request:
+    branches: [pokemon-za]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate Python sources
+        run: python -m compileall -q tools/violet tools/gen.py tests/test_violet_check_dump.py
+      - name: Run dump preflight tests (synthetic modules only)
+        run: python -m unittest discover -s tests -p 'test_violet_*.py' -v
+      - name: Syntax check modified C core
+        run: |
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn -Iruntime/hle runtime/loader.c
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn -Iruntime/hle runtime/dispatch.c
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn -Iruntime/hle runtime/gamebuild.c
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn tools/gamelib_entry.c
+          clang -std=gnu11 -D_GNU_SOURCE -DRECOMP_HAS_SUBSDK0=1 -fsyntax-only -Iruntime -Iruntime/nvn tools/gamelib_entry.c
+  importer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compile dual-game package importer
+        run: dotnet build tools/zaimport -c Release --nologo
