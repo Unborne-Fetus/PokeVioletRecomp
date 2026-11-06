@@ -64,7 +64,18 @@ try {
                 (Get-Item -LiteralPath $sourceFile).LastWriteTimeUtc -gt $exeTime
             }
         } | Where-Object { $_ }).Count -gt 0
-        if (-not $revision -or $revision -ne $oldRevision -or $newerSources) {
+        # A new commit containing only tests, docs or log tooling should not
+        # rebuild the large native runtime. Preserve the exact EXE/PDB pairing
+        # so a previously captured fault can still be symbolicated reliably.
+        $rebuild = $newerSources -or -not $revision -or -not $oldRevision
+        if ($git -and $revision -and $oldRevision -and $revision -ne $oldRevision) {
+            $buildInputs = @('runtime', 'Makefile', 'tools/gen.py', 'tools/gamelib_entry.c',
+                             'tools/violet/build.ps1', 'tools/violet/build_config.py',
+                             'tools/violet/make_local.sh')
+            $changed = @(& $git.Source -C $root diff --name-only $oldRevision $revision -- $buildInputs)
+            if ($LASTEXITCODE -ne 0 -or $changed.Count -gt 0) { $rebuild = $true }
+        }
+        if ($rebuild) {
             $build = Join-Path $PSScriptRoot 'build.ps1'
             if (-not (Test-Path -LiteralPath $build)) {
                 throw "The source checkout is too old to rebuild Violet. Update the pokemon-za checkout before retrying."
@@ -72,8 +83,8 @@ try {
             Write-Host 'Refreshing native Violet runtime to include boot fixes...'
             & $build
             if (-not (Test-Path -LiteralPath $exe)) { throw 'Runtime rebuild did not produce an executable.' }
-            if ($revision) { [IO.File]::WriteAllText($stamp, $revision + "`n") }
         }
+        if ($revision) { [IO.File]::WriteAllText($stamp, $revision + "`n") }
     }
     # The runtime changes its working directory to the user data root: always give it an absolute game path.
     $argString = '"' + $gameRoot + '"' + $(if ($Play) { ' --play' } else { '' })
