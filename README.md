@@ -2,9 +2,9 @@
 
 <img src="docs/icon/icon_1024.png" alt="ZA Recomp" width="128">
 
-# ZA Recomp
+# Violet Recomp
 
-**A native PC port of *Pokémon Legends: Z-A*, built by static recompilation.**
+**A native PC port of *Pokémon Violet*, built by static recompilation.**
 
 **English** · [Português (Brasil)](README.pt-BR.md)
 
