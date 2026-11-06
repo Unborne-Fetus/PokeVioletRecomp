@@ -1,7 +1,8 @@
 # Run Violet from this checkout with its extracted game directory and private dependency DLLs.
 # -Play skips the import/start screen; without it, the player sees the launcher.
 [CmdletBinding()]
-param([switch]$Play, [switch]$CheckOnly, [switch]$RebuildRuntime, [switch]$CaptureCrash)
+param([switch]$Play, [switch]$OpenControls, [switch]$CheckOnly, [switch]$RebuildRuntime, [switch]$CaptureCrash)
+if ($Play -and $OpenControls) { throw 'Choose either -Play or -OpenControls, not both.' }
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $exe = Join-Path $root 'build\violet-gnu\lasrecomp.exe'
@@ -16,7 +17,7 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $depDir -PathType Container)) {
     throw "The runtime DLL directory is missing: $depDir. Restore the private build dependencies."
 }
-if ($Play -or $CheckOnly) {
+if ($Play -or $OpenControls -or $CheckOnly) {
     $required = @(
         (Join-Path $exefs 'main'),
         (Join-Path $exefs 'subsdk0'),
@@ -39,9 +40,12 @@ if ($CheckOnly) {
 }
 
 $oldPath = $env:PATH
+$oldOpenControls = $env:VIOLET_LAUNCHER_OPEN_CONTROLS
 Push-Location $root
 try {
     $env:PATH = $depDir + ';' + $env:PATH
+    if ($OpenControls) { $env:VIOLET_LAUNCHER_OPEN_CONTROLS = '1' }
+    else { Remove-Item Env:VIOLET_LAUNCHER_OPEN_CONTROLS -ErrorAction SilentlyContinue }
     if ($RebuildRuntime) {
         # The native .exe contains the HLE service fixes. Merely pulling those source files does NOT update it.
         # Rebuild only when the checkout revision or runtime sources have changed since the last successful refresh.
@@ -133,5 +137,7 @@ try {
     }
 } finally {
     $env:PATH = $oldPath
+    if ($null -ne $oldOpenControls) { $env:VIOLET_LAUNCHER_OPEN_CONTROLS = $oldOpenControls }
+    else { Remove-Item Env:VIOLET_LAUNCHER_OPEN_CONTROLS -ErrorAction SilentlyContinue }
     Pop-Location
 }
