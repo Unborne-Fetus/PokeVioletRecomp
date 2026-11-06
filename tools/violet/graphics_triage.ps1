@@ -2,7 +2,7 @@
 # A single run uses temporary environment variables, restored on exit.
 [CmdletBinding()]
 param(
-    [ValidateSet('Baseline', 'PackagedZero', 'ConservativeUploads', 'BC5Unsigned', 'Depth32', 'ShadowCompareOff', 'ShaderQuadDerivatives', 'ShaderQuadControl')]
+    [ValidateSet('Baseline', 'PackagedZero', 'ConservativeUploads', 'BC5Unsigned', 'Depth32', 'ShadowCompareOff', 'ShaderQuadDerivatives', 'ShaderQuadControl', 'DepthEqualTolerance', 'NoDepthTest')]
     [string]$Mode = 'Baseline',
     [switch]$DryRun
 )
@@ -17,7 +17,9 @@ $vars = @(
     'LARECOMP_VK_D24',
     'LARECOMP_NO_SHADOW',
     'LARECOMP_SHADER_QUAD_DERIV',
-    'LARECOMP_SHADER_QUAD_CONTROL'
+    'LARECOMP_SHADER_QUAD_CONTROL',
+    'LARECOMP_VK_EQUAL_TOL',
+    'LARECOMP_NO_DEPTH_TEST'
 )
 $old = @{}
 foreach ($name in $vars) { $old[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -70,6 +72,19 @@ switch ($Mode) {
         $chosen['LARECOMP_SHADER_QUAD_CONTROL'] = '1'
         $chosen['LARECOMP_SHADER_QUAD_DERIV'] = '0'
     }
+    'DepthEqualTolerance' {
+        # Existing renderer workaround (exec.c fixed_state): a depth pre-pass
+        # rendered by a different vertex shader can differ by a few ULPs from
+        # its equal-depth color pass, causing thin black slash patterns.
+        # Compare LESS_OR_EQUAL with a small near-camera bias for EQUAL draws.
+        $chosen['LARECOMP_VK_EQUAL_TOL'] = '1'
+    }
+    'NoDepthTest' {
+        # This is a diagnosis, NOT a rendering fix. No occlusion is guaranteed;
+        # surfaces may appear in front of one another incorrectly. If the
+        # striped pattern remains, the source likely lies outside depth testing.
+        $chosen['LARECOMP_NO_DEPTH_TEST'] = '1'
+    }
 }
 try {
     foreach ($name in $vars) {
@@ -83,6 +98,12 @@ try {
     }
     if ($Mode -eq 'ShadowCompareOff') {
         Write-Warning 'Shadow depth comparisons are bypassed in this diagnostic; lighting may look too bright.'
+    }
+    if ($Mode -eq 'DepthEqualTolerance') {
+        Write-Output 'Testing depth pre-pass EQUAL tolerance for thin black slashes; no permanent shader or setting changes.'
+    }
+    if ($Mode -eq 'NoDepthTest') {
+        Write-Warning 'Depth testing is bypassed for this diagnostic, so occlusion will be incorrect. Do not save while testing.'
     }
     if ($Mode -eq 'ShaderQuadDerivatives' -or $Mode -eq 'ShaderQuadControl') {
         Write-Output 'Shader variant may compile new GLSL/SPIR-V pipelines. Normal graphics are restored on the next launch.'
