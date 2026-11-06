@@ -35,6 +35,8 @@ class VioletFirstFrameUI(unittest.TestCase):
 
     def test_inventory_overlay_has_early_exit_before_pets(self):
         source = body("runtime/ui/inventory_overlay.mm", r"bool inventory_overlay_wanted")
+        # Ignore explanatory comments: assert against executable statements only.
+        source = re.sub(r"//[^\n]*", "", source)
         self.assertLess(source.index("if (!g_game_is_la) return false;"), source.index("companion_card()"))
 
     def test_companion_read_checks_for_zelda(self):
