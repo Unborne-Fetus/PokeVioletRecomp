@@ -16,6 +16,7 @@ FRAME = re.compile(r"^\s+guest #(\d+) ([0-9a-f]+)", re.I)
 RESULT = re.compile(r"\[kernel\] abort on result 0x([0-9a-f]+)", re.I)
 FRAME_STAT = re.compile(r"^\[(?:vk|metal)\] t=[\d.]+ frame (\d+) [\d.]+ fps", re.I)
 STUB = re.compile(r"\[ipc\] (?:STUB |no HLE implementation for service )", re.I)
+TERMINATE = re.compile(r"\[am\] SetTerminateResult 0x([0-9a-f]+)", re.I)
 
 
 def location(addr, modules):
@@ -31,6 +32,7 @@ def analyze(log_text, timed_out=False):
     modules = []
     break_info = None
     payload_result = None
+    terminate_result = None
     stack = []
     recent_service_warnings = []
     frame_stats = 0
@@ -44,6 +46,9 @@ def analyze(log_text, timed_out=False):
             payload_result = int(m[1], 16)
         elif "abort payload Result is zero" in line:
             payload_result = 0
+        m = TERMINATE.search(line)
+        if m:
+            terminate_result = int(m[1], 16)
         m = BREAK.search(line)
         if m:
             break_info = {"reason": int(m[1], 16), "info": f"0x{int(m[2],16):x}",
@@ -70,6 +75,8 @@ def analyze(log_text, timed_out=False):
     notes = []
     if break_info and payload_result == 0:
         notes.append("Abort payload Result is zero. Do not infer an IPC failure from this value.")
+    if break_info and terminate_result is not None:
+        notes.append("The application called SetTerminateResult before abort; compare this value to the call chain.")
     if not frame_stats:
         notes.append("No positive-frame FPS line was observed; this alone does not prove no frame was presented.")
     if recent_service_warnings:
@@ -81,6 +88,7 @@ def analyze(log_text, timed_out=False):
         "timed_out": bool(timed_out),
         "loaded_modules": [{"name": name, "base": f"0x{base:x}", "size": f"0x{size:x}"}
                            for name, base, size in modules],
+        "set_terminate_result": None if terminate_result is None else f"0x{terminate_result:x}",
         "abort": ({**{k: v for k, v in break_info.items() if k != "pc"},
                    "location": location(break_info["pc"], modules),
                    "payload_result": None if payload_result is None else f"0x{payload_result:x}"}
