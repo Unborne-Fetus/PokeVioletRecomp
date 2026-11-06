@@ -1408,16 +1408,21 @@ void menu_render(void *cmd, uint32_t target_w, uint32_t target_h) {
     const double tw = target_w, th = target_h;
 #endif
     bool open = g_open.load();
-    bool inv = !open && inventory_overlay_wanted();
-    bool trk = !open && tracker_overlay_wanted();
-    bool trkd = !open && tracker_dungeon_wanted();
-    bool chaos = !open && chaos_overlay_wanted();
+    // The imported Link's Awakening UI helpers inspect Zelda-specific save,
+    // map, and item addresses. Violet's GameAddrs table is deliberately zero.
+    // Never call those overlay queries from Violet's first present (or later);
+    // keep the shared ImGui menu, keyboard, FPS, and devtools available.
+    bool la = g_game_is_la != 0;
+    bool inv = la && !open && inventory_overlay_wanted();
+    bool trk = la && !open && tracker_overlay_wanted();
+    bool trkd = la && !open && tracker_dungeon_wanted();
+    bool chaos = la && !open && chaos_overlay_wanted();
     bool kbd = g_kbd.load() == 1;
     bool notice = SDL_GetTicks() < g_notice_until.load();  // (menu_notice: a line at the bottom for a few seconds)
     if (devtools_frame) devtools_frame();  // (every presented frame: its time)
     bool dt = dt_open();
-    bool race = race_overlay_wanted();  // (run timer, race seed hash: race_overlay.mm)
-    bool flyin = pickup_flyin_wanted() && !open;  // (a silent pickup's card)
+    bool race = la && race_overlay_wanted();  // (Link's Awakening's run timer and seed hash)
+    bool flyin = la && !open && pickup_flyin_wanted();  // (Link's Awakening's pickup card)
     if (!render_needed(open, kbd, inv, trk, trkd, chaos, race, flyin) && !notice && !dt) {
         if (g_inited) { pthread_mutex_lock(&q_lock); q_events.clear(); pthread_mutex_unlock(&q_lock); }
         g_ov_same = 0;  // (shown again: built afresh first)
