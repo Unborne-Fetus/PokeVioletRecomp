@@ -74,7 +74,7 @@ class BootTriageTests(unittest.TestCase):
         ]))
         self.assertEqual(report["outcome"], "host-access-violation")
         self.assertEqual(report["native_fault"]["host_pc"]["symbol"], "lasrecomp+1234")
-        self.assertTrue(any("do not" in note.lower() for note in report["notes"]))
+        self.assertTrue(any("does not by itself prove" in note.lower() for note in report["notes"]))
 
     def test_unmapped_addresses_are_not_labeled_as_guest_module(self):
         self.assertIsNone(triage.location(0x7080000000, [("main", 0x7000000000, 0x47d3000)])["module"])
