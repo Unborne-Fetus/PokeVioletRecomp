@@ -593,6 +593,8 @@ def main():
     ap.add_argument('base', type=lambda s: int(s, 0))
     ap.add_argument('outdir')
     ap.add_argument('--hle')
+    ap.add_argument('--game', choices=('auto', 'violet'), default='auto',
+                    help='violet: lift Switch modules without Z-A or Link\'s Awakening-specific patches')
     ap.add_argument('--chunk', type=int, default=1500)  # functions per file at most
     ap.add_argument('--chunk-bytes', type=int, default=1500000)  # and about this much C (even compile times)
     ap.add_argument('--big-fn', type=int, default=100000)  # bytes of C from which a function gets its own file
@@ -605,7 +607,14 @@ def main():
     m = Module(args.name, args.nso, args.base, args.simd)
     global HOOKS, PATCHES
     main_build = Nso(os.path.join(os.path.dirname(args.nso), 'main')).build_id[:16]
-    if main_build in ZA_BUILDS:  # Pokémon Legends Z-A: its own patches, none of Link's Awakening's (nor its randomizer's)
+    if args.game == 'violet':
+        # Violet has its own executable layout and instruction addresses. Reusing the
+        # Z-A or Link's Awakening patch tables silently produces invalid guest code.
+        # Until Violet patches are audited, lift the original instructions only.
+        RANDO_CODE.clear()
+        if args.name == 'main':
+            print(f'{args.name}: Pokémon Violet (build {main_build}): no game-specific patches', file=sys.stderr)
+    elif main_build in ZA_BUILDS:  # Pokémon Legends Z-A: its own patches, none of Link's Awakening's (nor its randomizer's)
         RANDO_CODE.clear()
         if args.name == 'main':
             PATCHES.update(za_patches(main_build))
