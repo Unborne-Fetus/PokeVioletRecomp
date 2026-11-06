@@ -7,6 +7,7 @@ on:
       - "Play Violet.cmd"
       - "tools/violet/startup_menu.ps1"
       - "tools/violet/graphics_triage.ps1"
+      - "tools/violet/graphics_capture_report.ps1"
       - "runtime/nvn/objects.c"
       - "runtime/ui/launcher.mm"
       - "tools/violet/run.ps1"
@@ -72,6 +73,33 @@ jobs:
               throw "A/B test contaminated the runner environment with $name."
             }
           }
+      - name: Test F9 render-pass contact-sheet archive with synthetic images
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/graphics_capture_report.ps1'), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+          New-Item -ItemType Directory -Force -Path build | Out-Null
+          Add-Type -AssemblyName System.Drawing
+          $b = [System.Drawing.Bitmap]::new(16, 16)
+          try {
+            $b.Save((Join-Path $PWD 'build/pass_000.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+            $b.Save((Join-Path $PWD 'build/pass_001.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+          } finally { $b.Dispose() }
+          $report = ./tools/violet/graphics_capture_report.ps1 -MaxImages 2 -Minutes 2 | Out-String
+          if ($report -notmatch 'Indexed 2 pass images') { throw "Unexpected capture report: $report" }
+          $zip = Get-ChildItem -Path build -Filter 'violet-graphics-report-*.zip' | Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $zip) { throw 'F9 capture ZIP was not created.' }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $entries = [System.IO.Compression.ZipFile]::OpenRead($zip.FullName)
+          try {
+            $names = @($entries.Entries | ForEach-Object { $_.Name })
+            if ($names -notcontains 'contact-sheet-01.png' -or $names -notcontains 'pass-index.txt') {
+              throw "Capture ZIP missing index or image: $($names -join ', ')"
+            }
+          } finally { $entries.Dispose() }
       - name: Validate Windows startup menu and keybinding choices
         shell: pwsh
         run: |
