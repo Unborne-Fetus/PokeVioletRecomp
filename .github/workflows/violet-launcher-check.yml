@@ -10,6 +10,8 @@ on:
       - "tools/violet/make_local.sh"
       - "tools/violet/symbolize_crash.ps1"
       - "tools/violet/VioletNativeSymbols.cs"
+      - "tools/violet/addr2line_crash.py"
+      - "tests/test_violet_addr2line_crash.py"
       - "tests/test_violet_make_args.sh"
       - "tools/violet/boot_triage.py"
       - "tests/test_violet_boot_triage.py"
@@ -86,6 +88,9 @@ jobs:
           if ($output -notmatch '0x7efd8' -or $output -notmatch '0xc2f36') {
             throw "Missing native fault offsets: $output"
           }
+      - name: Test PE and MinGW DWARF crash symbolizer
+        shell: pwsh
+        run: python -m unittest discover -s tests -p test_violet_addr2line_crash.py -v
       - name: Test boot log analyzer
         shell: pwsh
         run: python -m unittest discover -s tests -p test_violet_boot_triage.py -v
