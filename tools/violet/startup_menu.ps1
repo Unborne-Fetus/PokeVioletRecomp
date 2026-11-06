@@ -16,9 +16,8 @@ try {
     Add-Type -AssemblyName System.Drawing
     [System.Windows.Forms.Application]::EnableVisualStyles()
 
-    $script:startupChoice = 3  # Closing the window or pressing Escape cancels.
-    $script:startupForm = New-Object System.Windows.Forms.Form
-    $form = $script:startupForm
+    $form = New-Object System.Windows.Forms.Form
+    $form.Tag = 3  # Closing the window or pressing Escape cancels.
     $form.Text = 'Pokemon Violet - Start'
     $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
     $form.MaximizeBox = $false
@@ -62,8 +61,8 @@ try {
         }
         $button.ForeColor = [System.Drawing.Color]::White
         $button.Add_Click({
-            $script:startupChoice = $code
-            $script:startupForm.Close()
+            $form.Tag = $code
+            $form.Close()
         }.GetNewClosure())
         $form.Controls.Add($button)
         return $button
@@ -85,8 +84,9 @@ try {
     $form.CancelButton = $quit
     $form.Add_Shown({ $play.Focus() })
     [void]$form.ShowDialog()
+    $chosen = [int]$form.Tag
     $form.Dispose()
-    exit $script:startupChoice
+    exit $chosen
 } catch {
     Write-Error ("Unable to open the Violet startup menu: " + $_.Exception.Message)
     exit 1
