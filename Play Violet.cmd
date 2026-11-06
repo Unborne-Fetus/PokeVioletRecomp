@@ -1,42 +1,31 @@
 @echo off
 setlocal
 pushd "%~dp0" || exit /b 1
-
-if not exist "build\violet-gnu\lasrecomp.exe" goto :missing_runtime
-if not exist "build\violet-gnu\lasgame.dll" goto :missing_game
-if not exist "build\msys-deps\ucrt64\bin" goto :missing_dependencies
-if not exist "extracted\exefs\main" goto :missing_extraction
-if not exist "extracted\exefs\subsdk0" goto :missing_extraction
-if not exist "extracted\exefs\sdk" goto :missing_extraction
-if not exist "extracted\exefs\main.npdm" goto :missing_extraction
-if not exist "extracted\romfs.bin" goto :missing_extraction
-
-set "PATH=%CD%\build\msys-deps\ucrt64\bin;%PATH%"
-echo Starting Pokemon Violet from the existing native build...
-echo Game data: "%CD%\extracted"
-"build\violet-gnu\lasrecomp.exe" "%CD%\extracted" --play
-if not "%ERRORLEVEL%"=="0" goto :game_error
+echo Pokemon Violet - native Windows launch
+echo.
+if not exist "tools\violet\run.ps1" goto :old_checkout
+if not exist "tools\violet\build.ps1" goto :old_checkout
+set "BRANCH="
+for /f "delims=" %%B in ('git branch --show-current 2^>nul') do set "BRANCH=%%B"
+if defined BRANCH if /I not "%BRANCH%"=="pokemon-za" (
+    echo WARNING: this checkout is on %BRANCH% instead of pokemon-za.
+    echo          Latest boot fixes may not exist here.
+)
+echo Checking and rebuilding changed native runtime files before launching...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\violet\run.ps1" -Play -RebuildRuntime -CaptureCrash
+set "EXIT=%ERRORLEVEL%"
+if not "%EXIT%"=="0" goto :failure
 popd
 exit /b 0
-
-:missing_runtime
-echo Missing native executable. Run tools\violet\build.ps1 -Game.
+:old_checkout
+echo This is an old checkout without Violet's development scripts.
+echo Switch to the latest pokemon-za checkout; do not run an older Violet executable.
 goto :failure
-:missing_game
-echo Missing lasgame.dll. Run tools\violet\build.ps1 -Game.
-goto :failure
-:missing_dependencies
-echo Missing private runtime DLL dependencies under build\msys-deps\ucrt64\bin.
-goto :failure
-:missing_extraction
-echo Missing extracted game files. Prepare your own Violet game files with tools\violet\prepare.ps1.
-goto :failure
-:game_error
-echo.
-echo Violet exited with an error. The native program is launchable but game startup may still abort.
-echo To diagnose, run tools\violet\test_boot.ps1 in PowerShell and check the generated boot-summary.json.
 :failure
 echo.
+echo The game did not start successfully. Scroll up for the error or inspect:
+echo   build\violet-launch-logs\*-stderr.log
+echo If the game aborts, send the newest stderr log so the actual cause can be fixed.
 pause
 popd
 exit /b 1
