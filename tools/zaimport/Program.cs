@@ -18,7 +18,8 @@ using LibHac.Tools.FsSystem;
 using LibHac.Tools.FsSystem.NcaUtils;
 using Path = System.IO.Path;
 
-const ulong ZaBase = 0x0100F43008C44000;  // Pokémon Legends Z-A (update: +0x800, DLC: +0x1000 + n)
+const ulong ZaBase = 0x0100F43008C44000;  // Pokémon Legends Z-A
+const ulong VioletBase = 0x01008F6008C5E000;  // Pokémon Violet (update: +0x800, DLC: +0x1000 + n)
 
 // (the error line is read by the start screen as UTF-8: without this "Pokémon ...nsp" came out as "Pok?mon ...nsp", #96)
 // (a writer of its own: Console.OutputEncoding needs a console, and the start screen starts this without a usable one)
@@ -64,9 +65,18 @@ static string NotAPackage(string pkg)
 
 static int Run(string[] args)
 {
+    string targetGame = "za";
+    if (args.Length >= 2 && args[0] == "--game")
+    {
+        targetGame = args[1].ToLowerInvariant();
+        args = args[2..];
+    }
+    if (targetGame is not ("za" or "violet")) return Fail("--game must be 'za' or 'violet'");
+    ulong targetBase = targetGame == "violet" ? VioletBase : ZaBase;
+    string targetName = targetGame == "violet" ? "Pokémon Violet" : "Pokémon Legends Z-A";
     string? titleKeys = null;  // (--title-keys: the launcher found it by its contents, whatever its name)
     if (args.Length >= 2 && args[0] == "--title-keys") (titleKeys, args) = (args[1], args[2..]);
-    if (args.Length < 3) return Fail("usage: zaimport [--title-keys <title.keys>] <prod.keys> <out dir> <package.xci|nsp>...");
+    if (args.Length < 3) return Fail("usage: zaimport [--game za|violet] [--title-keys <title.keys>] <prod.keys> <out dir> <package.xci|nsp>...");
     string keyDir = Path.GetDirectoryName(Path.GetFullPath(args[0]))!;
     titleKeys ??= new[] { "title.keys", "title.keys.txt" }.Select(n => Path.Combine(keyDir, n)).FirstOrDefault(File.Exists);
     var ks = ExternalKeyReader.ReadKeyFile(args[0], titleKeys);
@@ -113,13 +123,13 @@ static int Run(string[] args)
     foreach (var (nca, name) in ncas)
     {
         ulong tid = nca.Header.TitleId;
-        if ((tid & ~0x1FFFUL) != ZaBase) continue;
+        if ((tid & ~0x1FFFUL) != targetBase) continue;
         Console.WriteLine($"{name}: title {tid:x16} {nca.Header.ContentType}");
         if (nca.Header.ContentType == NcaContentType.Program)
         {
             // (the update's program NCA carries the base title id too: its data section is a patch)
             if (IsPatch(nca)) upd = nca;
-            else if (tid == ZaBase) base_ = nca;
+            else if (tid == targetBase) base_ = nca;
         }
         else if (nca.Header.ContentType == NcaContentType.PublicData)
         {
@@ -127,7 +137,7 @@ static int Run(string[] args)
         }
     }
     if (base_ == null)
-        return Fail(ncas.Count == 0 ? "no game packages found" : "the base game of Pokémon Legends Z-A isn't among these files");
+        return Fail(ncas.Count == 0 ? "no game packages found" : $"the base game of {targetName} isn't among these files");
     foreach (var n in new[] { base_, upd }.Concat(dlcs))
         if (n != null && n.Header.HasRightsId && !ks.ExternalKeySet.Contains(new RightsId(n.Header.RightsId)))
             return Fail($"no title key for {n.Header.TitleId:x16}: put title.keys from your Switch in the folder with " +
