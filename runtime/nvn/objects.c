@@ -434,11 +434,22 @@ static void builder_layout(uint64_t b, TexLayout *t) {
     tegra_layout_init(t);
     // Packaged textures (BNTX) were swizzled offline with their own block height, which can differ
     // from the driver default: NVNpackagedTextureLayout's low word is log2(GOBs per block).
+    // Layout value ZERO is also a valid explicit GOB block-height (1 GOB). Historically the
+    // zero value was mistaken for "unspecified" and the inferred default was used instead.
+    // Gate that interpretation behind an opt-in A/B diagnostic until checked with Violet.
     uint64_t pl = G(uint64_t, b, 0x50);
-    if (pl && (uint32_t)pl <= 5) t->block_height_log2 = (uint32_t)pl;
-    if (pl && ENV("LARECOMP_LOG_PACKAGED")) {
+    bool has_packaged_data = G(uint64_t, b, 0x48) != 0;
+    uint32_t default_bh = t->block_height_log2;
+    bool allow_zero = ENV("LARECOMP_PACKAGED_ZERO_BH") && atoi(ENV("LARECOMP_PACKAGED_ZERO_BH")) != 0;
+    bool explicit_bh = (pl != 0 || (allow_zero && has_packaged_data)) && (uint32_t)pl <= 5;
+    if (explicit_bh) t->block_height_log2 = (uint32_t)pl;
+    if (ENV("LARECOMP_LOG_PACKAGED") && (has_packaged_data || pl)) {
         static int n;
-        if (n++ < 4000) LOG("[nvn] packaged layout %016llx fmt %#x %ux%u lv %u -> default bh %u\n", pl, G(uint32_t, b, 0x20), t->width, t->height, t->levels, t->block_height_log2);
+        if (n++ < 4000)
+            LOG("[nvn] packaged bh: fmt %#x %ux%u lv %u data=%d layout=%016llx default=%u selected=%u%s\n",
+                G(uint32_t, b, 0x20), t->width, t->height, t->levels, has_packaged_data,
+                (unsigned long long)pl, default_bh, t->block_height_log2,
+                pl == 0 && has_packaged_data ? (allow_zero ? " (explicit zero test)" : " (zero ignored)") : "");
     }
 }
 
