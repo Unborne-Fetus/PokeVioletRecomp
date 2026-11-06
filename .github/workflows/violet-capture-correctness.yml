@@ -1,0 +1,26 @@
+name: Violet F9 capture correctness
+
+on:
+  push:
+    branches: [pokemon-za]
+    paths:
+      - "runtime/nvn/vulkan/device.c"
+      - "runtime/nvn/vulkan/exec.c"
+      - "runtime/nvn/vulkan/debug_capture_window.h"
+      - "tools/violet/graphics_capture_report.ps1"
+      - "tests/test_violet_debug_capture_window.c"
+      - "tests/test_violet_capture_wiring.py"
+      - ".github/workflows/violet-capture-correctness.yml"
+  workflow_dispatch:
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile real C capture-window predicate and run boundary tests
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -O2 tests/test_violet_debug_capture_window.c -o /tmp/violet-debug-capture-window
+          /tmp/violet-debug-capture-window
+      - name: Verify render-thread capture wiring and reporting
+        run: python3 -m unittest discover -s tests -p test_violet_capture_wiring.py -v
