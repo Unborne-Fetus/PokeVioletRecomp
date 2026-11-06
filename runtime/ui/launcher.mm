@@ -422,12 +422,11 @@ static const char *fail_head(int k, bool pt) {
 static const char *fail_hint(int k, bool pt) {
     static const char *const en[] = {
         "",
-        "Choose the folder with your Pok\xc3\xa9mon Legends Z-A game extracted (exefs and romfs folders), or with your "
+        "Choose the folder with your Pok\xc3\xa9mon Violet game extracted (exefs and romfs folders), or with your "
         "dump (.xci / .nsp) and your prod.keys.",
-        "Pok\xc3\xa9mon Legends Z-A's base game isn't among those files. Choose the folder with your own dump.",
+        "Pok\xc3\xa9mon Violet's base game isn't among those files. Choose the folder with your own dump.",
         "Make sure there's about 12 GB free and try again.",
-        "Violet Recomp currently recompiles Violet experimentally. Game compatibility is not yet verified. "
-        "update).",
+        "Violet Recomp currently recompiles Violet experimentally. Game compatibility is not yet verified.",
         "Some files are missing. Choose the folder again; if it happens again, dump the game again.",
         "Make sure there's about 4 GB free and try again. If it keeps happening, report it on GitHub with logs/launcher.log.",
         "Put the prod.keys (and title.keys) dumped from your own Switch in the folder with the game files. Any file "
