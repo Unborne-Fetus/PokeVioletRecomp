@@ -22,6 +22,7 @@ jobs:
       - name: Compile and run the real companion lookup without Zelda memory
         shell: bash
         run: |
-          cc -std=gnu11 -O1 -ffunction-sections -fdata-sections -Iruntime -c runtime/hle/pets.c -o /tmp/violet-pets.o
-          cc -std=gnu11 -O1 -ffunction-sections -fdata-sections -Iruntime -Wl,--gc-sections tests/test_violet_pets_boot.c /tmp/violet-pets.o -o /tmp/violet-pets-boot
+          # The recomp runtime uses Clang-only AArch64 SIMD lowering builtins.
+          clang -std=gnu11 -O1 -ffunction-sections -fdata-sections -Iruntime -c runtime/hle/pets.c -o /tmp/violet-pets.o
+          clang -std=gnu11 -O1 -ffunction-sections -fdata-sections -Iruntime -Wl,--gc-sections tests/test_violet_pets_boot.c /tmp/violet-pets.o -o /tmp/violet-pets-boot
           /tmp/violet-pets-boot
