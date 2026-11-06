@@ -63,6 +63,13 @@ jobs:
         shell: pwsh
         run: |
           Add-Type -Path ./tools/violet/VioletNativeSymbols.cs -ErrorAction Stop
+          # Exercise the Windows DbgHelp P/Invoke code on an ordinary system PE image.
+          # Its lack of our game's PDB is expected; resolving an unknown symbol is fine.
+          $probe = [VioletNativeSymbols]::Resolve(
+            (Join-Path $env:WINDIR 'System32/kernel32.dll'), [UInt64[]]@(0x1000))
+          if ($probe.Count -ne 1 -or $probe[0] -notmatch '0x1000') {
+            throw 'DbgHelp resolver could not load a Windows PE image.'
+          }
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile(
             (Join-Path $PWD 'tools/violet/symbolize_crash.ps1'), [ref]$null, [ref]$errors) | Out-Null
