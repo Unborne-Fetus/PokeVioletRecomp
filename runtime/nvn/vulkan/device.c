@@ -1950,7 +1950,17 @@ void vk_save_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h) 
 // ================================================================== game presentation (metal.m backend_present)
 // Draws the game's image into the window with the widescreen crop, then the overlay menu.
 extern void vk_present_draw(VkCommandBuffer cb, TexBackend *b, float vx, float vy, float vw, float vh, const float pv[8]);
-extern bool g_debug_frame;  // (exec.c; set in present_hooks, read in the render thread's present)
+extern bool g_debug_frame;  // exec.c: set on the rendering thread for each actual frame
+// The guest can submit command lists asynchronously. The F9 request is made
+// by the game/input thread, but deciding which frame to capture must happen
+// on the render thread, using rq_frame() rather than a racy global bool.
+static _Atomic uint64_t debug_capture_start;
+static _Atomic uint32_t debug_capture_length;
+bool vk_debug_capture_active(uint64_t frame) {
+    uint64_t start = atomic_load_explicit(&debug_capture_start, memory_order_acquire);
+    uint32_t length = atomic_load_explicit(&debug_capture_length, memory_order_relaxed);
+    return start && frame >= start && frame - start < length;
+}
 void renderer_submit(void);
 void renderer_set_scale(float sx, float sy);
 uint64_t renderer_present_count(void);
@@ -2115,6 +2125,8 @@ static const char *pp_text(void) {
 // The GPU side of a present (the render thread when it's on, rqueue.c): the present pass, the overlay, shots.
 // frame: the number of this present (the game thread's frame when it was queued).
 void backend_present_now(NvnTexture *t, uint64_t frame) {
+    // Includes a pass left open by the last command list of this exact frame.
+    g_debug_frame = vk_debug_capture_active(frame);
     if (pp_on < 0) pp_on = getenv("LARECOMP_VK_PROF") != NULL;
     if (pp_on) pp_t = SDL_GetTicksNS();
     TexBackend *b = vk_tex(t, true);
@@ -2356,7 +2368,12 @@ static void present_hooks(void) {
     // LARECOMP_DEBUG_FRAMES=<n> (with LARECOMP_DEBUG_FRAME / F9): dump n consecutive frames (build/pass_<frame>_NNN.png)
     static long debug_n = -1;
     if (debug_n < 0) { const char *e = ENV("LARECOMP_DEBUG_FRAMES"); debug_n = e && atol(e) > 1 ? atol(e) : 1; }
-    g_debug_frame = debug_at && total_frames >= (uint64_t)debug_at && total_frames < (uint64_t)debug_at + (uint64_t)debug_n;
+    // The producer only publishes the capture range. The render thread calls
+    // vk_debug_capture_active(renderer_exec_frame()) for every queued list and
+    // at present, so F9 includes the draws of the requested frame even when
+    // translation is several command lists behind the game thread.
+    atomic_store_explicit(&debug_capture_length, (uint32_t)debug_n, memory_order_relaxed);
+    atomic_store_explicit(&debug_capture_start, debug_at > 0 ? (uint64_t)debug_at : 0, memory_order_release);
 }
 
 void backend_present(NvnTexture *t) {
