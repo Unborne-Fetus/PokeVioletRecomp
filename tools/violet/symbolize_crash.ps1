@@ -5,7 +5,11 @@ param([string]$LogPath, [switch]$ScanOnly)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $exe = Join-Path $root 'build\violet-gnu\lasrecomp.exe'
-$pdb = Join-Path $root 'build\violet-gnu\lasrecomp.pdb'
+$pdbCandidates = @(
+    (Join-Path $root 'build\violet-gnu\link\lasrecomp.pdb'),
+    (Join-Path $root 'build\violet-gnu\lasrecomp.pdb')
+)
+$pdb = $pdbCandidates | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
 if (-not $LogPath) {
     $logs = Join-Path $root 'build\violet-launch-logs'
     $latest = Get-ChildItem -LiteralPath $logs -Filter '*-stderr.log' -File -ErrorAction Stop |
@@ -32,8 +36,9 @@ Write-Output "Crash log: $LogPath"
 Write-Output ("Native executable offsets: " + (($offsets | ForEach-Object { '0x{0:x}' -f $_ }) -join ', '))
 if ($ScanOnly) { return }
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Native exe missing: $exe" }
-if (-not (Test-Path -LiteralPath $pdb -PathType Leaf)) {
-    throw "Matching debug symbols missing: $pdb (do not use a PDB from another build)."
+if (-not $pdb) {
+    throw ("Matching debug symbols missing. Checked:`n  " + ($pdbCandidates -join "`n  ") +
+           "`nDo not substitute a PDB from another build.")
 }
 $source = Join-Path $PSScriptRoot 'VioletNativeSymbols.cs'
 if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
