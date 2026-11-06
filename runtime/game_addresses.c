@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "rt.h"
+#include "game_identity.h"
 
 #define GA_ADDR(name, value) .name = UINT64_C(value),
 static const GameAddrs ga_v1_0_0 = {
@@ -25,6 +26,7 @@ static const GameVersion versions[] = {
 #undef GA_RELEASE
 };
 
+static const GameAddrs ga_no_game_specific_addresses = {0};
 const GameAddrs *g_ga;
 static const GameVersion *g_version;
 
@@ -98,7 +100,18 @@ bool game_version_select(const char *game_dir, char *why, size_t why_size) {
         return false;
     }
     memcpy(g_main_build_id, id, sizeof g_main_build_id);
+    g_version = NULL;  // Do not reuse a version profile from a previous game boot.
     const GameVersion *v = game_version_by_build_id(id);
+    if (!v && rt_is_violet_exefs(exefs)) {
+        // Violet shares neither LA's fixed addresses nor Z-A's game-specific
+        // code patches. Until a Violet profile is verified against its own
+        // binaries, use an empty address table rather than silently borrowing
+        // addresses from another game.
+        g_ga = &ga_no_game_specific_addresses;
+        LOG("[game] Pokémon Violet (main build ID %02X%02X%02X%02X%02X%02X%02X%02X): no fixed-address profile; game-specific LA hooks disabled\n",
+            id[0], id[1], id[2], id[3], id[4], id[5], id[6], id[7]);
+        return true;
+    }
     if (!v && !is_la_program(exefs)) {
         // Another game (Pokémon Legends Z-A): Link's Awakening's hooks stay off (g_game_is_la), and an address read
         // anyway takes 1.0.0's, as the fixed addresses before these tables did - mapped memory, never address 0
