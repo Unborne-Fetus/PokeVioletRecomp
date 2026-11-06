@@ -1,0 +1,21 @@
+name: Violet first-frame pacing safety
+
+on:
+  push:
+    branches: [pokemon-za]
+    paths:
+      - "runtime/nvn/pace.c"
+      - "runtime/nvn/pace.h"
+      - "tools/test_pace.c"
+      - "tools/test_pace.py"
+      - ".github/workflows/violet-pace-regression.yml"
+  workflow_dispatch:
+
+jobs:
+  pace-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run simulated frame pacing, including Violet null-manager regression
+        run: |
+          python3 tools/test_pace.py
