@@ -8,6 +8,8 @@ on:
       - "tools/violet/run.ps1"
       - "tools/violet/build.ps1"
       - "tools/violet/make_local.sh"
+      - "tools/violet/symbolize_crash.ps1"
+      - "tools/violet/VioletNativeSymbols.cs"
       - "tests/test_violet_make_args.sh"
       - "tools/violet/boot_triage.py"
       - "tests/test_violet_boot_triage.py"
@@ -57,6 +59,26 @@ jobs:
         run: |
           bash -n tools/violet/make_local.sh
           bash tests/test_violet_make_args.sh
+      - name: Compile native PDB resolver and scan sample host crash
+        shell: pwsh
+        run: |
+          Add-Type -Path ./tools/violet/VioletNativeSymbols.cs -ErrorAction Stop
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/symbolize_crash.ps1'), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }
+          $testLog = Join-Path $env:RUNNER_TEMP 'violet-host-crash.log'
+          @'
+          *** exception c0000005 accessing 0
+          host backtrace (guest functions are f_<addr>):
+            #10 00007ff6ac7aefd8 lasrecomp+7efd8
+            #11 00007ff6ac7f2f36 lasrecomp+c2f36
+            #12 00007ff6ac7aae66 lasrecomp+7ae66
+          '@ | Set-Content -LiteralPath $testLog -Encoding UTF8
+          $output = ./tools/violet/symbolize_crash.ps1 -LogPath $testLog -ScanOnly | Out-String
+          if ($output -notmatch '0x7efd8' -or $output -notmatch '0xc2f36') {
+            throw "Missing native fault offsets: $output"
+          }
       - name: Test boot log analyzer
         shell: pwsh
         run: python -m unittest discover -s tests -p test_violet_boot_triage.py -v
