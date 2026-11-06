@@ -38,6 +38,7 @@ extern "C" {
 #include "paths.h"
 #include "gamebuild.h"
 #include "gamelib.h"
+#include "game_identity.h"
 #include "romfs_build.h"
 #include "settings.h"
 #include "input_bind.h"
@@ -119,8 +120,8 @@ static void lang_update(void) { g_pt = settings_ui_portuguese(); }  // (runtime/
 // The start screen asks GitHub for the project's releases once per launch (a background curl, which macOS and
 // Windows 10+ ship) and offers the best one if it outranks this build: any v<x.y.z> above every beta, betas by
 // number; other tags are ignored. Offline / no curl / anything unexpected: nothing is shown.
-#define RELEASES_URL "https://api.github.com/repos/Hexveil404/PokeZ-ARecomp/releases?per_page=100"
-#define RELEASE_PAGE "https://github.com/Hexveil404/PokeZ-ARecomp/releases/tag/"
+#define RELEASES_URL "https://api.github.com/repos/Unborne-Fetus/PokeVioletRecomp/releases?per_page=100"
+#define RELEASE_PAGE "https://github.com/Unborne-Fetus/PokeVioletRecomp/releases/tag/"
 
 static long long tag_rank(const std::string &t) {
     int n, a, b, c;
@@ -359,10 +360,12 @@ static bool read_build_id(const std::string &main_path, uint8_t id[8]) {
 static std::string check_copied_files(const std::string &root) {
     uint8_t id[8];
     if (!read_build_id(root + "/exefs/main", id)) return "No game files";
-    if (!build_version(id)) return "Wrong game version";
-    // (the game data: romfs.bin - Pokémon Z-A's packages, read by zaimport - or the copied romfs/ folder, which
-    // runtime/services/fs.c serves itself)
-    if (!file_exists(root + "/romfs.bin") && !file_exists(root + (build_is_za(id) ? "/romfs" : "/romfs/region_common")))
+    bool violet = rt_is_violet_exefs((root + "/exefs").c_str());
+    if (!violet && !build_version(id)) return "Wrong game version";
+    if (violet && !file_exists(root + "/exefs/subsdk0")) return "Violet subsdk0 missing";
+    // Either a RomFS image (from the importer), or an extracted directory.
+    if (!file_exists(root + "/romfs.bin") &&
+        !file_exists(root + (violet || build_is_za(id) ? "/romfs" : "/romfs/region_common")))
         return "Game data missing";
     return "";
 }
@@ -371,7 +374,7 @@ static std::string check_copied_files(const std::string &root) {
 static std::string game_version(const std::string &root) {
     uint8_t id[8];
     const char *v = read_build_id(root + "/exefs/main", id) ? build_version(id) : NULL;
-    return v ? v : "?";
+    return rt_is_violet_exefs((root + "/exefs").c_str()) ? "Violet (experimental)" : (v ? v : "?");
 }
 
 // "" = ready to play, else what is wrong
@@ -481,7 +484,11 @@ static void find_game(const std::string &dir, int depth, std::string &exefs, std
 
 static bool build_id_ok(const std::string &main_path) {
     uint8_t id[8];
-    return read_build_id(main_path, id) && build_version(id);
+    if (!read_build_id(main_path, id)) return false;
+    size_t slash = main_path.find_last_of("/\\");
+    if (slash != std::string::npos && rt_is_violet_exefs(main_path.substr(0, slash).c_str()))
+        return true;  // Version-specific behavior still requires testing.
+    return build_version(id) != NULL;
 }
 
 // ------------------------------------------------------------------ Z-A: the player's packages -> game files
@@ -621,7 +628,7 @@ static bool import_packages(const std::vector<std::string> &pkgs, const std::str
         return false;
     }
     std::string log = g_root + "/import.log";
-    std::vector<const char *> argv = {tool};
+    std::vector<const char *> argv = {tool, "--game", "violet"};
     if (!title_keys.empty()) argv.push_back("--title-keys"), argv.push_back(title_keys.c_str());
     argv.push_back(keys.c_str());
     argv.push_back(g_root.c_str());
@@ -913,7 +920,7 @@ static void *extract_thread(void *) {
 check:
     {
         std::string why = check_game_files(g_root);
-        if (why.empty() && prompts_wanted()) {
+        if (why.empty() && !rt_is_violet_exefs((g_root + "/exefs").c_str()) && prompts_wanted()) {
             set_job("Drawing the button icons for your controller...");
             make_prompts(true);
         }
