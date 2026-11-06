@@ -20,12 +20,14 @@ try {
     $env:ZIG_GLOBAL_CACHE_DIR = Join-Path $root 'build\zig-cache'
     $env:ZIG_LOCAL_CACHE_DIR = Join-Path $root 'build\zig-local-cache'
     New-Item -ItemType Directory -Force -Path $env:TEMP | Out-Null
-    $common = @('--no-print-directory', "-j$Jobs", 'B=build/violet-gnu', 'DEPS=build/msys-deps/ucrt64',
-        'CC=build/zig/zig.exe cc -target x86_64-windows-gnu',
-        'CXX=build/zig/zig.exe c++ -target x86_64-windows-gnu',
-        'GENARCH=-mcpu=x86_64_v3', 'GENOPT=-O1 -DGUEST_VOLATILE',
-        'WINDRES=/c/msys64/ucrt64/bin/windres.exe')
-    & $bash --noprofile --norc -c 'exec make "$@"' violet-build @common runtime-objs
+    # Do not marshal space-containing CC/CXX/GENOPT values through bash -c "$@" from PowerShell.
+    # Windows native argument passing can strip those quotes, so make sees -target or -DGUEST_VOLATILE
+    # as flags instead of parts of a single VAR=value argument. Use a real Bash script and array.
+    $makeScript = 'tools/violet/make_local.sh'
+    if (-not (Test-Path -LiteralPath $makeScript -PathType Leaf)) {
+        throw "Missing $makeScript. Update the pokemon-za checkout before building."
+    }
+    & $bash --noprofile --norc $makeScript $Jobs objects
     if ($LASTEXITCODE) { throw 'Runtime object compilation failed.' }
     python tools\violet\build_config.py
     if ($LASTEXITCODE) { throw 'Local build configuration failed.' }
@@ -33,8 +35,7 @@ try {
     if ($Game -and -not (Test-Path -LiteralPath generated\main\main_build_id.txt)) {
         throw 'Generate Violet first with tools\violet\prepare.ps1 -Generate.'
     }
-    & $bash --noprofile --norc -c 'exec make "$@"' violet-build @common -f Makefile `
-        -f build/violet-gnu/toolchain.mk -f build/violet-gnu/giants.mk $target
+    & $bash --noprofile --norc $makeScript $Jobs link $target
     if ($LASTEXITCODE) { throw 'Native build/link failed.' }
 } finally {
     foreach ($name in $savedEnvironment.Keys) {
