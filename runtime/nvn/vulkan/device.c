@@ -17,6 +17,7 @@
 #include "vk.h"
 #include "record.h"
 #include "vk_dlaa.h"
+#include "debug_capture_window.h"
 #include "../output_scale.h"
 #include "../renderer.h"
 #include "../pace.h"
@@ -1959,7 +1960,7 @@ static _Atomic uint32_t debug_capture_length;
 bool vk_debug_capture_active(uint64_t frame) {
     uint64_t start = atomic_load_explicit(&debug_capture_start, memory_order_acquire);
     uint32_t length = atomic_load_explicit(&debug_capture_length, memory_order_relaxed);
-    return start && frame >= start && frame - start < length;
+    return vk_debug_frame_in_window(frame, start, length);
 }
 void renderer_submit(void);
 void renderer_set_scale(float sx, float sy);
