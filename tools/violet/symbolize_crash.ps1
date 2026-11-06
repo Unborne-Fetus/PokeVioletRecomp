@@ -28,8 +28,8 @@ foreach ($hit in $hits) {
     if ($seen.Add($rva)) { [void]$offsets.Add($rva) }
 }
 if (-not $offsets.Count) { throw 'No native lasrecomp+RVA entries in the supplied log.' }
-Write-Host "Crash log: $LogPath"
-Write-Host ("Native executable offsets: " + (($offsets | ForEach-Object { '0x{0:x}' -f $_ }) -join ', '))
+Write-Output "Crash log: $LogPath"
+Write-Output ("Native executable offsets: " + (($offsets | ForEach-Object { '0x{0:x}' -f $_ }) -join ', '))
 if ($ScanOnly) { return }
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Native exe missing: $exe" }
 if (-not (Test-Path -LiteralPath $pdb -PathType Leaf)) {
@@ -42,13 +42,13 @@ if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
 if (-not ([System.Management.Automation.PSTypeName]'VioletNativeSymbols').Type) {
     Add-Type -Path $source -ErrorAction Stop
 }
-Write-Host "Resolving native call stack using local Windows DbgHelp and $pdb"
-Write-Host '(no game data or debug symbols are uploaded)'
+Write-Output "Resolving native call stack using local Windows DbgHelp and $pdb"
+Write-Output '(no game data or debug symbols are uploaded)'
 try {
     $results = [VioletNativeSymbols]::Resolve($exe, [UInt64[]]$offsets.ToArray())
-    foreach ($line in $results) { Write-Host $line }
+    foreach ($line in $results) { Write-Output $line }
 } catch {
-    Write-Host ('Symbolization unavailable: ' + $_.Exception.Message)
-    Write-Host 'Keep the EXE and matching PDB together. If this still fails, share the PDB only if comfortable.'
+    Write-Output ('Symbolization unavailable: ' + $_.Exception.Message)
+    Write-Output 'Keep the EXE and matching PDB together. If this still fails, share the PDB only if comfortable.'
     throw
 }
