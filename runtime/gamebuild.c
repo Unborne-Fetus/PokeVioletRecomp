@@ -1,5 +1,6 @@
 // Builds the game code library on the player's machine (runtime/gamebuild.h).
 #include "gamebuild.h"
+#include "game_identity.h"
 #include "build_cache.h"
 
 #include <pthread.h>
@@ -137,6 +138,7 @@ typedef struct {
     char gen[1100], gen_script[1100];  // generator: lasgen, or (source checkout) the venv's python + tools/gen.py
     char cc[1100];                     // compiler: zig (as `zig cc`), or LARECOMP_CC / clang
     bool zig;
+    bool violet;  // use the third module and safe, patch-free Violet code generation
     char inc[1100], entry[1100], hle[1100];  // headers the game code includes, tools/gamelib_entry.c, HLE names
 #ifdef _WIN32
     char implib[1100];  // the .exe's import library (the runtime functions the game code calls)
@@ -219,7 +221,7 @@ typedef struct {
 } Gen;
 
 static PlatProc gen_start(const Tools *t, const Gen *g, int i, const char *game_dir) {
-    static const char *const base[2] = {"0x7000000000", "0x7008000000"};
+    static const char *const base[3] = {"0x7000000000", "0x7008000000", "0x7004000000"};
     char nso[1100];
     snprintf(nso, sizeof nso, "%s" SEP "exefs" SEP "%s", game_dir, g->name);
     Args a = {0};
@@ -230,6 +232,7 @@ static PlatProc gen_start(const Tools *t, const Gen *g, int i, const char *game_
     add(&a, base[i]);
     add(&a, g->out);
     if (i == 1) { add(&a, "--hle"); add(&a, t->hle); }
+    if (t->violet) { add(&a, "--game"); add(&a, "violet"); }
     PlatProc p = spawn(a.v, g->log);
     args_free(&a);
     return p;
@@ -429,6 +432,7 @@ static PlatProc start_compile(const Tools *t, const Unit *u) {
     char id[GAMELIB_FULL_ID_SIZE + 32];
     snprintf(id, sizeof id, "-DGAMELIB_ID=\"%s\"", g_full_id);
     add(&a, id);
+    if (t->violet && !strcmp(u->stem, "gamelib_entry")) add(&a, "-DRECOMP_HAS_SUBSDK0=1");
     add(&a, "-c");
     add(&a, u->src);
     add(&a, "-o");
@@ -455,19 +459,28 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         snprintf(why, why_size, "the game code builder is missing from this copy of ZA Recomp");
         return false;
     }
+    char exefs[1100], subsdk0_path[1100];
+    snprintf(exefs, sizeof exefs, "%s" SEP "exefs", game_dir);
+    t.violet = rt_is_violet_exefs(exefs);
+    snprintf(subsdk0_path, sizeof subsdk0_path, "%s" SEP "subsdk0", exefs);
+    if (t.violet && !file_exists(subsdk0_path)) {
+        snprintf(why, why_size, "Violet needs exefs/subsdk0 (Nintendo movie library)");
+        return false;
+    }
     char work[1100], tmp[1100];
     snprintf(work, sizeof work, "%s" SEP ".gamebuild", game_dir);
     snprintf(tmp, sizeof tmp, "%s" SEP "%s.tmp", work, GAMELIB_NAME);
-    char input_paths[6][1100], spec[4096];
+    char input_paths[7][1100], spec[4096];
     snprintf(input_paths[0], sizeof input_paths[0], "%s" SEP "exefs" SEP "main", game_dir);
     snprintf(input_paths[1], sizeof input_paths[1], "%s" SEP "exefs" SEP "sdk", game_dir);
+    snprintf(input_paths[2], sizeof input_paths[2], "%s" SEP "exefs" SEP "subsdk0", game_dir);
     const char *headers[] = {"cpu.h", "simd.h", "simd_fp.h", "gamelib.h"};
-    for (int i = 0; i < 4; ++i) snprintf(input_paths[i+2], sizeof input_paths[i+2], "%s" SEP "%s", t.inc, headers[i]);
+    for (int i = 0; i < 4; ++i) snprintf(input_paths[i+3], sizeof input_paths[i+3], "%s" SEP "%s", t.inc, headers[i]);
     // Generator changes should rebuild only chunks whose C changed, as in the existing incremental builder.
     // Compiler/header/flag changes invalidate every object; entry always rebuilds because it embeds the library id.
-    const char *inputs[] = {input_paths[2], input_paths[3], input_paths[4], input_paths[5], t.cc};
+    const char *inputs[] = {input_paths[3], input_paths[4], input_paths[5], input_paths[6], t.cc};
     // The compiler's contents identify it, so relocating the app does not discard reusable objects.
-    snprintf(spec, sizeof spec, "LASBUILD3\n%s\n%s\n%s\nzig=%d pointer=%d%s%s\n", GAMELIB_BASE_ID,
+    snprintf(spec, sizeof spec, "LASBUILD4\n%s\n%s\n%s\nzig=%d pointer=%d%s%s\n", GAMELIB_BASE_ID,
              GAMELIB_CFLAGS, GAMELIB_SHARED, t.zig, (int)sizeof(void *),  // (+ the Linux zig target: objects from
              t.zig && ZIG_TARGET[0] ? " target=" : "", t.zig ? ZIG_TARGET : "");  // before it are rebuilt once)
     if (o->progress) o->progress(0, "Checking completed build files...");
@@ -482,8 +495,9 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         snprintf(rp, sizeof rp, "%s" SEP "gamelib_entry.receipt", work);
         update = stat(rp, &st) == 0;
     }
-    const char *gen_inputs[5] = {input_paths[0], input_paths[1], t.gen, t.hle};
+    const char *gen_inputs[6] = {input_paths[0], input_paths[1], t.gen, t.hle};
     int ngen = 4;
+    if (t.violet) gen_inputs[ngen++] = input_paths[2];
     if (t.gen_script[0]) gen_inputs[ngen++] = t.gen_script;
     if (!build_cache_prepare_generation(cache, GAMELIB_ID, gen_inputs, ngen, why, why_size)) {
         build_cache_failed(cache);
@@ -514,10 +528,11 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         t.cc, t.zig ? " cc" : "", o->jobs);
     if (gamelib_old_cpu()) LOG("[gamebuild] CPU without AVX2 / FMA / BMI2: built for x86-64-v2\n");
 
-    // 1. the generator, both modules at once; their finished files are compiled while it goes on
-    Gen gens[2] = {{.name = "main"}, {.name = "sdk"}};
+    // Generate 2 modules for Z-A, 3 for Violet. Keep each module's generated table separate.
+    Gen gens[3] = {{.name = "main"}, {.name = "sdk"}, {.name = "subsdk0"}};
+    const int nmod = t.violet ? 3 : 2;
     bool ok = true;
-    for (int i = 0; i < 2 && ok; i++) {
+    for (int i = 0; i < nmod && ok; i++) {
         Gen *g = &gens[i];
         g->exit = -1;
         snprintf(g->log, sizeof g->log, "%s" SEP "gen_%s.log", work, g->name);
@@ -532,8 +547,8 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
     }
 
     Units units = {0};
-    int queued[2] = {0, 0};  // chunk files of each module put in units so far
-    bool tables[2] = {false, false};
+    int queued[3] = {0, 0, 0};  // chunks of each module queued for compilation
+    bool tables[3] = {false, false, false};
     int next = 0, jobs = o->jobs < 1 ? 1 : o->jobs > 64 ? 64 : o->jobs;
     struct { PlatProc p; int unit; } run[64];
     int nrun = 0;
@@ -551,7 +566,7 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         bool gens_done = true;
         double gen_frac = 0;
         unsigned long long written = 0;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < nmod; i++) {
             Gen *g = &gens[i];
             if (g->exit < 0) {
                 read_gen_log(g);
@@ -593,7 +608,8 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
                 add_unit(&units, src, work, stem);
                 tables[i] = true;
             }
-            gen_frac += g->exit == 0 ? 0.5 : g->n ? 0.5 * (double)g->ci / (double)g->n : 0;
+            double weight = 1.0 / nmod;
+            gen_frac += g->exit == 0 ? weight : g->n ? weight * (double)g->ci / (double)g->n : 0;
         }
         if (!ok) break;
         for (int k = 0; k < units.n; k++) written += units.u[k].bytes;
@@ -672,7 +688,7 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         sleep_ms(50);
     }
     for (int k = 0; k < nrun; k++) stop(run[k].p);  // (a failure: the rest is of no use - the failure shows at once)
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < nmod; i++)
         if (gens[i].p && gens[i].exit < 0) stop(gens[i].p);
 
     // 2. link
