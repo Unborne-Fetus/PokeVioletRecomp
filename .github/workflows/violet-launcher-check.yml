@@ -51,17 +51,22 @@ jobs:
           $shadows = ./tools/violet/graphics_triage.ps1 -Mode ShadowCompareOff -DryRun 3>&1 | Out-String
           $deriv = ./tools/violet/graphics_triage.ps1 -Mode ShaderQuadDerivatives -DryRun | Out-String
           $quad = ./tools/violet/graphics_triage.ps1 -Mode ShaderQuadControl -DryRun | Out-String
+          $depth = ./tools/violet/graphics_triage.ps1 -Mode DepthEqualTolerance -DryRun | Out-String
+          $off = ./tools/violet/graphics_triage.ps1 -Mode NoDepthTest -DryRun 3>&1 | Out-String
           if ($baseline -notmatch 'Overrides: none' -or
               $zero -notmatch 'LARECOMP_PACKAGED_ZERO_BH=1' -or
               $safe -notmatch 'LARECOMP_TEX_UNPACK_THREADS=0' -or
               $shadows -notmatch 'LARECOMP_NO_SHADOW=1' -or
               $deriv -notmatch 'LARECOMP_SHADER_QUAD_DERIV=1' -or
               $deriv -notmatch 'LARECOMP_SHADER_QUAD_CONTROL=0' -or
-              $quad -notmatch 'LARECOMP_SHADER_QUAD_CONTROL=1') {
+              $quad -notmatch 'LARECOMP_SHADER_QUAD_CONTROL=1' -or
+              $depth -notmatch 'LARECOMP_VK_EQUAL_TOL=1' -or
+              $off -notmatch 'LARECOMP_NO_DEPTH_TEST=1') {
             throw 'A/B test toggles did not select the expected graphics paths.'
           }
           $v = @('LARECOMP_PACKAGED_ZERO_BH', 'LARECOMP_TEX_UNPACK_THREADS', 'LARECOMP_NO_SHADOW',
-                 'LARECOMP_SHADER_QUAD_DERIV', 'LARECOMP_SHADER_QUAD_CONTROL')
+                 'LARECOMP_SHADER_QUAD_DERIV', 'LARECOMP_SHADER_QUAD_CONTROL',
+                 'LARECOMP_VK_EQUAL_TOL', 'LARECOMP_NO_DEPTH_TEST')
           foreach ($name in $v) {
             if ([Environment]::GetEnvironmentVariable($name, 'Process')) {
               throw "A/B test contaminated the runner environment with $name."
