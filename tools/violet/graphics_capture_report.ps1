@@ -174,7 +174,7 @@ Write-Output 'Attach the ZIP in ChatGPT, not to a public repository. Keep the or
 ) { $Matches[1] } })
 if ($groups.Count) {
     $best = $groups | Sort-Object @{Expression = {$_.Count}; Descending = $true},
-        @{Expression = { ($_.Group | Measure-Object -Property LastWriteTimeUtc -Maximum).Maximum }; Descending = $true} |
+        @{Expression = { ($_.Group | Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1).LastWriteTimeUtc }; Descending = $true} |
         Select-Object -First 1
     $frame = $best.Name
     $chosen = @($best.Group)
