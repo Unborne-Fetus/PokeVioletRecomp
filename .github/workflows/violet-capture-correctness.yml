@@ -10,6 +10,7 @@ on:
       - "tools/violet/graphics_capture_report.ps1"
       - "tests/test_violet_debug_capture_window.c"
       - "tests/test_violet_capture_wiring.py"
+      - "tests/test_violet_texture_alias_cache.py"
       - ".github/workflows/violet-capture-correctness.yml"
   workflow_dispatch:
 
@@ -24,3 +25,5 @@ jobs:
           /tmp/violet-debug-capture-window
       - name: Verify render-thread capture wiring and reporting
         run: python3 -m unittest discover -s tests -p test_violet_capture_wiring.py -v
+      - name: Verify texture views never reuse stale copy aliases
+        run: python3 -m unittest discover -s tests -p test_violet_texture_alias_cache.py -v
