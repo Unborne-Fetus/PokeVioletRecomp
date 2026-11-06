@@ -96,6 +96,12 @@ jobs:
           if ($out -notmatch '400,780' -or $out -notmatch '2 frames') {
             throw "Probe launcher did not select configured scene pixel: $out"
           }
+          # Windows PowerShell 5.1 reads an unmarked .ps1 as ANSI (not UTF-8).
+          # Test the exact interpreter/invocation used by Play Violet users.
+          $legacy = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File './tools/violet/graphics_probe_launch.ps1' -X 400 -Y 780 -Frames 2 -DryRun
+          if ($LASTEXITCODE -ne 0 -or ($legacy -join ' ') -notmatch '400,780') {
+            throw "PowerShell 5.1 failed to parse the probe launcher: $($legacy -join ' ')"
+          }
           if ($env:LARECOMP_PROBE -or $env:LARECOMP_DEBUG_FRAMES) {
             throw 'Probe launcher leaked temporary environment variables.'
           }
