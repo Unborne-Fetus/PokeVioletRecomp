@@ -36,6 +36,17 @@ Write-Output "Crash log: $LogPath"
 Write-Output ("Native executable offsets: " + (($offsets | ForEach-Object { '0x{0:x}' -f $_ }) -join ', '))
 if ($ScanOnly) { return }
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw "Native exe missing: $exe" }
+# Zig's MinGW build uses -g (usually DWARF), while DbgHelp primarily expects
+# CodeView/PDB debug information. Try native PE exports + DWARF first. This
+# uses the matching EXE already on disk, without recompiling or reading game data.
+$addr2lineScript = Join-Path $PSScriptRoot 'addr2line_crash.py'
+$python = Get-Command python -ErrorAction SilentlyContinue
+if ($python -and (Test-Path -LiteralPath $addr2lineScript -PathType Leaf)) {
+    Write-Output 'Trying PE export names and MinGW DWARF symbols from the matching executable...'
+    & $python.Source $addr2lineScript --log $LogPath --exe $exe
+    if ($LASTEXITCODE -eq 0) { return }
+    Write-Output 'PE/DWARF inspection did not complete; trying Windows PDB symbols as fallback.'
+}
 if (-not $pdb) {
     throw ("Matching debug symbols missing. Checked:`n  " + ($pdbCandidates -join "`n  ") +
            "`nDo not substitute a PDB from another build.")
