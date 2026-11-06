@@ -1,0 +1,64 @@
+name: Publish completed Violet Windows ZIP
+
+on:
+  push:
+    branches: [pokemon-za]
+    paths: ['.github/workflows/publish-violet-windows.yml']
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download verified Windows artifact from completed build
+        uses: actions/download-artifact@v4
+        with:
+          name: PokeVioletRecomp-v0.1.0-alpha.2-Windows-x64
+          run-id: 42290310184
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: build/dist
+
+      - name: Validate ZIP hash and integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          asset="build/dist/PokeVioletRecomp-v0.1.0-alpha.2-Windows-x64.zip"
+          test -s "$asset"
+          echo 'db9261428a5d639cb1403a8a651a4f4506d75c7b9a239a20248c21a67a27aa51  build/dist/PokeVioletRecomp-v0.1.0-alpha.2-Windows-x64.zip' | sha256sum -c -
+          unzip -t "$asset" | tail -1
+
+      - name: Publish Windows alpha release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v0.1.0-alpha.2
+        run: |
+          set -euo pipefail
+          asset="build/dist/PokeVioletRecomp-v0.1.0-alpha.2-Windows-x64.zip"
+          cat > "$RUNNER_TEMP/violet-windows-notes.md" <<'NOTES'
+          # Pokémon Violet Recomp — Windows native build (experimental)
+
+          This is a **development alpha, not verified playable**. The ZIP contains the compiled Windows native runtime, a convenient PokeVioletRecomp.exe start file, the local game-data importer, standalone code generator, compiler, and required libraries.
+
+          1. Download the Windows-x64 ZIP and extract the entire Violet Recomp folder.
+          2. Double-click PokeVioletRecomp.exe.
+          3. Follow the first-run screen to select your **own legitimately obtained** Pokémon Violet game files and keys.
+          4. Allow time and disk space for local import, compilation and setup.
+
+          No Nintendo game data, keys or compiled guest game code are distributed. A Vulkan-capable Windows PC is required. Graphics, boot stability and gameplay remain experimental. Passing CI only establishes a successful native build and package validation, **not** a confirmed playable game.
+
+          Documentation: https://github.com/Unborne-Fetus/PokeVioletRecomp/blob/pokemon-za/docs/WINDOWS-RELEASE.md
+          NOTES
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$asset" --clobber
+          else
+            gh release create "$TAG" "$asset" --target d3b7608b1705ac5eaeb870185e000848fb4669ef \
+              --title "Pokémon Violet Recomp v0.1.0-alpha.2 — Windows Native Preview" \
+              --notes-file "$RUNNER_TEMP/violet-windows-notes.md" --prerelease
+          fi
