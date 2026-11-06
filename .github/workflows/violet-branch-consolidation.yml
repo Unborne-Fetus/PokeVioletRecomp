@@ -1,0 +1,47 @@
+# One-time SHA-guarded branch consolidation. Archives divergent legacy history before deleting its ref.
+name: One-time Violet branch consolidation
+
+on:
+  push:
+    branches: [pokemon-za]
+    paths: [.github/workflows/violet-branch-consolidation.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const primary = 'pokemon-za';
+            const extra = [
+              {name: 'violet/boot-abort-diagnostics-20261106', sha: '2c2b387aac257187192cf33c7ce788022bae8fc9'},
+              {name: 'violet-port', sha: '0d16531e65bbad38bcd075b06619c7f1a8290156'}
+            ];
+            const {data: repository} = await github.rest.repos.get({owner, repo});
+            if (repository.default_branch !== primary) throw new Error('Default branch changed: refusing cleanup');
+            // Validate both leases before any mutation. Never remove an independently updated branch.
+            for (const entry of extra) {
+              const {data: ref} = await github.rest.git.getRef({owner, repo, ref: 'heads/' + entry.name});
+              if (ref.object.sha !== entry.sha) throw new Error('Branch moved: ' + entry.name);
+            }
+            // The older violet-port branch has 33 divergent commits. Keep them reachable by tag.
+            const tagName = 'archive/violet-port-20261106';
+            try {
+              const {data: oldTag} = await github.rest.git.getRef({owner, repo, ref: 'tags/' + tagName});
+              if (oldTag.object.sha !== extra[1].sha) throw new Error('Archive tag points at unexpected commit');
+            } catch (e) {
+              if (e.status !== 404) throw e;
+              await github.rest.git.createRef({
+                owner, repo, ref: 'refs/tags/' + tagName, sha: extra[1].sha
+              });
+            }
+            for (const entry of extra) {
+              await github.rest.git.deleteRef({owner, repo, ref: 'heads/' + entry.name});
+              core.info('Removed checked branch ' + entry.name);
+            }
+            core.info('Kept pokemon-za as the only active branch, archived violet-port history under ' + tagName);
