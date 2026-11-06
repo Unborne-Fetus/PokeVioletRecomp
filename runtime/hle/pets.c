@@ -89,6 +89,7 @@ static bool ghost_item(void) {
 // Items-page Ghost slot: -1 none (not an item in this seed / not found), 0 found, 1 laid to rest and his Owl's
 // check collected (EighthClear: the Owl's flow sets it as it gives the item)
 int pets_ghost_state(void) {
+    if (!g_game_is_la) return -1;
     if (!ghost_item() || !flag_get(kComp[C_GHOST].found)) return -1;
     return flag_get("Ghost4_Clear") && flag_get("EighthClear");
 }
@@ -110,6 +111,7 @@ static volatile int g_swap;  // a call to carry out on the game thread (pets_gam
 
 // Make companion c follow Link; the one it replaces stays callable. The game thread then swaps the actors at once.
 void pets_call(int c) {
+    if (!g_game_is_la) return;
     int cur = pets_current();
     if (cur == c || c < 0 || c > C_ROOSTER) return;
     if (cur > C_NONE && cur <= C_ROOSTER) flag_put(kComp[cur].found, true);
@@ -159,6 +161,7 @@ static bool companion_allowed(const char *lv, int c) {
 // Game thread, each pad read (input.c fill_state). Waits for the pause menu to close (game_in_play), then sends the
 // old follower away and spawns the new one next to Link.
 void pets_game_tick(Cpu *c) {
+    if (!g_game_is_la) return;
     extern int game_in_play(void);
     extern int inventory_items_cursor(void);
     {   // (test) LARECOMP_TEST_COMPANION=<1 BowWow, 2 Marin, 3 Ghost, 4 Rooster>: that companion, two seconds into play
@@ -239,10 +242,11 @@ int pets_menu_options(int out[6]) {
 // A / X / Y; a direction that moved onto / off the slot stays hidden from it until released (else the game would
 // take it as a fresh press). B (close) and L / R (other pages) reach the game and leave the slot.
 static int g_slot = -1;  // highlighted choice while the cursor is on the slot, -1 = on the game's grid
-int pets_menu_slot(void) { return g_slot; }
-bool pets_hide_item_cursor(void) { return g_slot >= 0; }  // (renderer: the game's grid brackets go while on the card)
+int pets_menu_slot(void) { return g_game_is_la ? g_slot : -1; }
+bool pets_hide_item_cursor(void) { return g_game_is_la && g_slot >= 0; }  // (renderer: the game's grid brackets go while on the card)
 
 uint64_t pets_menu_input(uint64_t b, int32_t st[4]) {
+    if (!g_game_is_la) return b;
     extern int inventory_items_cursor(void);
     enum { A = 1, X = 4, Y = 8, LEFT = 1 << 12, UP = 1 << 13, RIGHT = 1 << 14, DOWN = 1 << 15 };
     const uint64_t dirs = 0xfull << 12 | 0xffull << 16;
@@ -280,8 +284,9 @@ uint64_t pets_menu_input(uint64_t b, int32_t st[4]) {
 }
 
 // save editor (randomizer seeds): companion c found / give or take it (as finding it would, without calling it)
-bool pets_owned(int c) { return c > C_NONE && c <= C_ROOSTER && flag_get(kComp[c].found); }
+bool pets_owned(int c) { return g_game_is_la && c > C_NONE && c <= C_ROOSTER && flag_get(kComp[c].found); }
 void pets_give(int c, bool on) {
+    if (!g_game_is_la) return;
     if (c <= C_NONE || c > C_ROOSTER) return;
     flag_put(kComp[c].found, on);
     if (c == C_GHOST && on) {  // (as rt_pet_item: straight to "take me to my grave")
