@@ -66,7 +66,12 @@ static void flag_put(const char *name, bool on) {
     *b = on ? (uint8_t)(*b | 1u << (i & 7)) : (uint8_t)(*b & ~(1u << (i & 7)));
 }
 
-int pets_current(void) { return *(volatile uint8_t *)(uintptr_t)COMPANION; }
+int pets_current(void) {
+    // LIVE_SAVE + 0x555D is a Link's Awakening companion byte. Violet's
+    // all-zero address table makes this a null-page access at 0x555D.
+    if (!g_game_is_la || !GA(LIVE_SAVE)) return C_NONE;
+    return *(volatile uint8_t *)(uintptr_t)COMPANION;
+}
 
 static bool ghost_item(void) {
     if (g_ghost_item >= 0) return g_ghost_item;
@@ -90,6 +95,7 @@ int pets_ghost_state(void) {
 
 // Companions the menu can call (found, story not past them), current one included: count, values in out[]
 int pets_callable(int out[5]) {
+    if (!g_game_is_la) return 0;
     int n = 0;
     for (int c = C_BOWWOW; c <= C_ROOSTER; c++)
         if (pets_current() == c || (flag_get(kComp[c].found) && !(c == C_GHOST && ghost_item()) &&
@@ -221,6 +227,7 @@ void pets_game_tick(Cpu *c) {
 // Pause menu companion slot (runtime/ui/inventory_overlay.mm): the choices are "no companion" then every callable
 // one; out[0] = 0. Fewer than 2 = nothing to switch (no slot drawn).
 int pets_menu_options(int out[6]) {
+    if (!g_game_is_la) return 0;
     out[0] = C_NONE;
     return 1 + pets_callable(out + 1);
 }
