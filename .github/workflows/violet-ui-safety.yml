@@ -1,0 +1,27 @@
+name: Violet Zelda UI isolation
+
+on:
+  push:
+    branches: [pokemon-za]
+    paths:
+      - "runtime/hle/pets.c"
+      - "runtime/ui/menu.mm"
+      - "runtime/ui/inventory_overlay.mm"
+      - "tests/test_violet_pets_boot.c"
+      - "tests/test_violet_ui_guards.py"
+      - ".github/workflows/violet-ui-safety.yml"
+  workflow_dispatch:
+
+jobs:
+  ui-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate first-present overlay entrypoint guards
+        run: python3 -m unittest discover -s tests -p test_violet_ui_guards.py -v
+      - name: Compile and run the real companion lookup without Zelda memory
+        shell: bash
+        run: |
+          cc -std=gnu11 -O1 -ffunction-sections -fdata-sections -Iruntime -c runtime/hle/pets.c -o /tmp/violet-pets.o
+          cc -std=gnu11 -O1 -ffunction-sections -fdata-sections -Iruntime -Wl,--gc-sections tests/test_violet_pets_boot.c /tmp/violet-pets.o -o /tmp/violet-pets-boot
+          /tmp/violet-pets-boot
