@@ -86,7 +86,7 @@ static void save_png(id<MTLTexture> tex, const char *path) {
 #endif
 
 static const uint8_t BUILD_ID[8] = {0xae, 0x16, 0xf7, 0x1e, 0x00, 0x2a, 0xf8, 0xcb};  // Link's Awakening v1.0.0 main
-// Pokémon Legends Z-A's main builds (tools/patches.py ZA_BUILDS): set up from the player's .xci / .nsp and keys by the
+// Pokémon Violet's main builds (tools/patches.py ZA_BUILDS): set up from the player's .xci / .nsp and keys by the
 // bundled tools/zaimport (no extracted folder), no romfs/ copy - the game reads romfs.bin (+ aoc/ for the DLC)
 static const struct { uint8_t id[8]; const char *version; } ZA_BUILDS[] = {
     {{0x72, 0x22, 0xe1, 0x3e, 0xcf, 0x6a, 0xdb, 0x32}, "1.0.0"},
@@ -102,7 +102,7 @@ static const char *build_version(const uint8_t id[8]) {
 }
 static bool build_is_za(const uint8_t id[8]) { return build_version(id) && memcmp(id, BUILD_ID, 8); }
 // The release tag this build is (also names the release files; Makefile / tools/bundle_macos.sh / make_dmg.sh read
-// it): ZA Recomp's v<major>.<minor>.<patch> (Hexveil404/PokeZ-ARecomp releases).
+// it): Violet Recomp's v<major>.<minor>.<patch> (Hexveil404/PokeZ-ARecomp releases).
 #define LARECOMP_VERSION "v0.1.18"
 extern "C" void rt_launcher_log(const char *fmt, ...);  // runtime/launcher_log.c: logs/launcher.log and stderr
 extern "C" const char *rt_version(void) { return LARECOMP_VERSION; }  // (runtime/main.c: the log's first line)
@@ -270,8 +270,8 @@ static void *upd_thread(void *) {
         PlatProc p = plat_spawn(av, NULL, false);
         if (!p || plat_proc_wait(p, true) != 0) return upd_fail("the zip couldn't be unpacked"), (void *)NULL;
     }
-    fs::path src = u8p(work) / u8p("ZA Recomp");
-    if (!fs::exists(src / "lasrecomp.exe")) return upd_fail("the zip isn't a ZA Recomp release"), (void *)NULL;
+    fs::path src = u8p(work) / u8p("Violet Recomp");
+    if (!fs::exists(src / "lasrecomp.exe")) return upd_fail("the zip isn't a Violet Recomp release"), (void *)NULL;
     g_upd_state = UPD_INSTALL;
     // every file first: a half-moved update would mix two versions - moves only once the list is complete
     std::vector<fs::path> files;
@@ -426,7 +426,7 @@ static const char *fail_hint(int k, bool pt) {
         "dump (.xci / .nsp) and your prod.keys.",
         "Pok\xc3\xa9mon Legends Z-A's base game isn't among those files. Choose the folder with your own dump.",
         "Make sure there's about 12 GB free and try again.",
-        "ZA Recomp runs versions 1.0.0, 2.0.0 and 2.0.2 of the game (base game, or base game + the 2.0.0 or 2.0.2 "
+        "Violet Recomp currently recompiles Violet experimentally. Game compatibility is not yet verified. "
         "update).",
         "Some files are missing. Choose the folder again; if it happens again, dump the game again.",
         "Make sure there's about 4 GB free and try again. If it keeps happening, report it on GitHub with logs/launcher.log.",
@@ -435,11 +435,11 @@ static const char *fail_hint(int k, bool pt) {
         "The full reason is in logs/launcher.log, in the data folder."};
     static const char *const ptb[] = {
         "",
-        "Escolha a pasta com o seu Pokémon Legends Z-A extraído (pastas exefs e romfs), ou com o seu dump (.xci / .nsp) "
+        "Escolha a pasta com o seu Pokémon Violet extraído (pastas exefs e romfs), ou com o seu dump (.xci / .nsp) "
         "e o seu prod.keys.",
-        "O jogo base de Pokémon Legends Z-A não está entre esses arquivos. Escolha a pasta com o seu próprio dump.",
+        "O jogo base de Pokémon Violet não está entre esses arquivos. Escolha a pasta com o seu próprio dump.",
         "Veja se há uns 12 GB livres e tente de novo.",
-        "O ZA Recomp roda as versões 1.0.0, 2.0.0 e 2.0.2 do jogo (jogo base, ou jogo base + atualização 2.0.0 ou 2.0.2).",
+        "O Violet Recomp ainda está em desenvolvimento; o jogo não foi validado.",
         "Faltam arquivos. Escolha a pasta de novo; se acontecer outra vez, faça o dump do jogo de novo.",
         "Veja se há uns 4 GB livres e tente de novo. Se continuar, avise no GitHub com o arquivo logs/launcher.log.",
         "Coloque o prod.keys (e o title.keys) do seu próprio Switch na pasta dos arquivos do jogo. Qualquer nome serve "
@@ -624,7 +624,7 @@ static bool import_packages(const std::vector<std::string> &pkgs, const std::str
     char tool[1100];
     if (!rt_resource("zaimport/zaimport" PLAT_EXE_SUFFIX, "build/zaimport/zaimport" PLAT_EXE_SUFFIX,
                      tool, sizeof tool)) {
-        err = "the game file importer is missing from this copy of ZA Recomp";
+        err = "the game file importer is missing from this copy of Violet Recomp";
         return false;
     }
     std::string log = g_root + "/import.log";
@@ -857,7 +857,7 @@ static void *extract_thread(void *) {
     }
     set_job("Looking for the game files...");
     find_game(src, 0, exefs, romfs, unusable);
-    if ((exefs.empty() || romfs.empty()) && unusable) {  // packages: Pokémon Legends Z-A's (zaimport reads them)
+    if ((exefs.empty() || romfs.empty()) && unusable) {  // packages: Pokémon Violet's (zaimport reads them)
         int compressed = 0;
         find_packages(src, 0, pkgs, compressed);
         if (pkgs.empty() && compressed) {
@@ -1333,8 +1333,8 @@ static void *mod_install_thread(void *) {
         bool exefs = false;
         std::string romfs = find_mod_romfs(base, 0, exefs);
         if (romfs.empty()) {
-            msg = exefs ? TR("This mod changes the game's code (exefs): that kind of mod doesn't work in ZA Recomp.",
-                             "Esse mod mexe no código do jogo (exefs): esse tipo de mod não funciona no ZA Recomp.")
+            msg = exefs ? TR("This mod changes the game's code (exefs): that kind of mod doesn't work in Violet Recomp.",
+                             "Esse mod mexe no código do jogo (exefs): esse tipo de mod não funciona no Violet Recomp.")
                         : TR("No romfs folder in it: this doesn't look like a mod of the game's files.",
                              "Não tem pasta romfs: não parece um mod dos arquivos do jogo.");
             goto done;
@@ -1462,7 +1462,7 @@ static void save_export(void) {
 }
 
 // ------------------------------------------------------------------ screen
-// ZA Recomp's start screen (2026-10-27, its own look - not LAS Recomp's): a top bar (logo, version, the pages Play,
+// Violet Recomp's start screen (2026-10-27, its own look - not LAS Recomp's): a top bar (logo, version, the pages Play,
 // Mods, Saves, Settings and About, PT | EN), the page under it over a night city of our own (drawn here: nothing of
 // the game's), a status bar at the bottom. Layout in 1280 x 720 units scaled to the window's height.
 static ImFont *g_font_title, *g_font_menu, *g_font_small;  // (the in-game menu's tabs and the first-play questions)
@@ -1790,8 +1790,8 @@ static bool menu_tip(float s) {
         static const char *const pad[] = {"Minus + Plus", "View + Menu", "Create + Options"};
         int fam = bind_label_family() % 3;
         ImGui::PushTextWrapPos(0);
-        ImGui::TextUnformatted(TR("ZA Recomp has its own menu for settings: F1 (or Minus+Plus on a controller).",
-                                  "O ZA Recomp tem um menu próprio de configurações: F1 (ou Menos+Mais no controle)."));
+        ImGui::TextUnformatted(TR("Violet Recomp has its own menu for settings: F1 (or Minus+Plus on a controller).",
+                                  "O Violet Recomp tem um menu próprio de configurações: F1 (ou Menos+Mais no controle)."));
         ImGui::Spacing();
         if (g_pt) ImGui::Text("Abra no jogo com F1 ou Esc, ou no controle com o %s (ou %s juntos).", home_pt[fam], pad[fam]);
         else ImGui::Text("Open it in game with F1 or Esc, or on a controller with the %s (or %s together).", home_en[fam], pad[fam]);
@@ -1904,8 +1904,8 @@ static void prelaunch_tab(float sc) {
         ImGui::PushFont(g_font_menu);
         ImGui::TextColored(ImVec4(1, 0.72f, 0.4f, 1), "%s", TR("Are you sure?", "Tem certeza?"));
         ImGui::PopFont();
-        ImGui::Text(TR("This deletes ZA Recomp's copy of the game files (%.1f GB).",
-                       "Isso apaga a cópia dos arquivos do jogo do ZA Recomp (%.1f GB)."), gb);
+        ImGui::Text(TR("This deletes Violet Recomp's copy of the game files (%.1f GB).",
+                       "Isso apaga a cópia dos arquivos do jogo do Violet Recomp (%.1f GB)."), gb);
         ImGui::TextDisabled("%s", TR("Saves, mods and settings are kept. Your own game files aren't touched.",
                                      "Saves, mods e configurações ficam. Os seus próprios arquivos do jogo não são tocados."));
         if (rt_dev_mode()) {  // (a source checkout: the files are the project's own extracted/)
@@ -1916,7 +1916,7 @@ static void prelaunch_tab(float sc) {
         ImGui::Spacing();
         if (ImGui::Button(TR("Delete", "Apagar"), ImVec2(220 * sc, 0))) {
             bool ok = rt_remove_game_files(g_root.c_str());  // (runtime/paths.c: only what the extraction made)
-            set_job(ok ? "Game files deleted." : "Could not delete the game files (not in ZA Recomp's data folder?).", !ok);
+            set_job(ok ? "Game files deleted." : "Could not delete the game files (not in Violet Recomp's data folder?).", !ok);
             g_files_deleted = true, gb = -1;
             ImGui::CloseCurrentPopup();
         }
@@ -2664,22 +2664,22 @@ extern "C" void launcher_run(const char *root) {
                                rebuild ? TR("The game code needs a rebuild", "O código do jogo precisa ser recompilado")
                                        : TR("Let's set the game up", "Vamos preparar o jogo"));
                     const char *what = rebuild
-                        ? TR("This version of ZA Recomp builds the game's code a little differently. Your game files "
+                        ? TR("This version of Violet Recomp builds the game's code a little differently. Your game files "
                              "are already here: only the code is compiled again (a few minutes).",
-                             "Esta versão do ZA Recomp compila o código do jogo de um jeito um pouco diferente. Os seus "
+                             "Esta versão do Violet Recomp compila o código do jogo de um jeito um pouco diferente. Os seus "
                              "arquivos do jogo já estão aqui: só o código é compilado de novo (alguns minutos).")
-                        : TR("Choose the folder with your own copy of Pokémon Legends Z-A, either way:\n"
+                        : TR("Choose the folder with your own copy of Pokémon Violet, either way:\n"
                              "· the game extracted (exefs and romfs folders, as an emulator or your Switch extracts them): "
                              "no keys needed;\n"
                              "· or your dump: the base game (.xci or .nsp), optionally the update and the DLC (.nsp), and "
                              "the prod.keys from your Switch.\n"
-                             "You can also drop the folder on this window. The game isn't included with ZA Recomp.",
-                             "Escolha a pasta com a sua própria cópia de Pokémon Legends Z-A, de um destes jeitos:\n"
+                             "You can also drop the folder on this window. The game isn't included with Violet Recomp.",
+                             "Escolha a pasta com a sua própria cópia de Pokémon Violet, de um destes jeitos:\n"
                              "· o jogo extraído (pastas exefs e romfs, como um emulador ou o seu Switch extraem): sem "
                              "precisar de keys;\n"
                              "· ou o seu dump: o jogo base (.xci ou .nsp), se quiser a atualização e a DLC (.nsp), e o "
                              "prod.keys do seu Switch.\n"
-                             "Também dá para arrastar a pasta para esta janela. O jogo não vem com o ZA Recomp.");
+                             "Também dá para arrastar a pasta para esta janela. O jogo não vem com o Violet Recomp.");
                     float ty = 196 + text(dl, F_BODY, 16, x, 196, C_SOFT, what, w).y + 22;
                     if (!rebuild) {
                         panel(dl, x, ty, w, 64, C_PANEL);
@@ -2925,19 +2925,19 @@ extern "C" void launcher_run(const char *root) {
                 static const SDL_DialogFileFilter zip_f[] = {{"Zip", "zip"}};
                 if (button("##export", TR("Export (.zip)", "Exportar (.zip)"), bx, ly, 0, 46, BTN_SECONDARY, g_save_time != 0,
                            IC_DOWN_ARROW))
-                    SDL_ShowSaveFileDialog(picked_export, NULL, win, zip_f, 1, "ZA Recomp save.zip");
+                    SDL_ShowSaveFileDialog(picked_export, NULL, win, zip_f, 1, "Violet Recomp save.zip");
                 bx += ImGui::GetItemRectSize().x / g_s + 10;
                 if (button("##opensave", TR("Open folder", "Abrir pasta"), bx, ly, 0, 46, BTN_SECONDARY, true, IC_FOLDER)) {
                     mkdir("save", 0755);
                     reveal_folder("save");
                 }
                 ly += 64;
-                const char *from = TR("Where from: a JKSV backup (modded Switch: JKSV/Pokémon Legends Z-A/...), a save from "
-                                      "an emulator or from another copy of ZA Recomp. Choose the folder holding the file "
+                const char *from = TR("Where from: a JKSV backup (modded Switch: JKSV/Pokémon Violet/...), a save from "
+                                      "an emulator or from another copy of Violet Recomp. Choose the folder holding the file "
                                       "\"main\", or drop it (or a .zip) on this window. Your current save becomes a backup "
                                       "first, so nothing is lost. The save must be from the same game version or older.",
-                                      "De onde: um backup do JKSV (Switch desbloqueado: JKSV/Pokémon Legends Z-A/...), um "
-                                      "save de emulador ou de outra cópia do ZA Recomp. Escolha a pasta com o arquivo "
+                                      "De onde: um backup do JKSV (Switch desbloqueado: JKSV/Pokémon Violet/...), um "
+                                      "save de emulador ou de outra cópia do Violet Recomp. Escolha a pasta com o arquivo "
                                       "\"main\", ou arraste ela (ou um .zip) para esta janela. O save atual vira um backup "
                                       "antes, então nada se perde. O save precisa ser da mesma versão do jogo ou mais antiga.");
                 float fh = text_size(F_BODY, 14, from, cw - 92).y;
@@ -2997,7 +2997,7 @@ extern "C" void launcher_run(const char *root) {
                     ImGui::Dummy(ImVec2(1, 0));
                 }
                 ImGui::EndChild();
-                bar = {C_TEAL, TR("Saves live in the save folder next to ZA Recomp", "Os saves ficam na pasta save, ao lado do ZA Recomp")};
+                bar = {C_TEAL, TR("Saves live in the save folder next to Violet Recomp", "Os saves ficam na pasta save, ao lado do Violet Recomp")};
                 if (back_key) g_tab = TAB_PLAY, g_focus_play = true;
             }
 
@@ -3027,7 +3027,7 @@ extern "C" void launcher_run(const char *root) {
             // ================= About
             if (g_tab == TAB_ABOUT) {
                 float x = 72, w = fminf(760, W_ - 144), y = 100;
-                y += text(dl, F_H1, 40, x, y, C_TEXT, "ZA Recomp").y + 4;
+                y += text(dl, F_H1, 40, x, y, C_TEXT, "Violet Recomp").y + 4;
                 y += text(dl, F_LABEL, 16, x, y, C_GOLD_HI,
                           (std::string(TR("Version ", "Versão ")) + tag_label(LARECOMP_VERSION, false)).c_str()).y + 18;
                 const char *about = TR("A PC port of Pokémon Legends: Z-A made by static recompilation: the game's code is "
@@ -3164,12 +3164,12 @@ extern "C" void launcher_run(const char *root) {
                                                                                  tag_label(upd, false) + "?").c_str());
                             ImGui::PopFont();
                             if (upd_size > 0)
-                                ImGui::Text(TR("ZA Recomp downloads it (%.0f MB) from GitHub, replaces its program files and opens again.",
-                                               "O ZA Recomp baixa a versão nova (%.0f MB) do GitHub, troca os arquivos do programa e abre de novo."),
+                                ImGui::Text(TR("Violet Recomp downloads it (%.0f MB) from GitHub, replaces its program files and opens again.",
+                                               "O Violet Recomp baixa a versão nova (%.0f MB) do GitHub, troca os arquivos do programa e abre de novo."),
                                             upd_size / 1e6);
                             else
-                                ImGui::Text("%s", TR("ZA Recomp downloads it from GitHub, replaces its program files and opens again.",
-                                                     "O ZA Recomp baixa a versão nova do GitHub, troca os arquivos do programa e abre de novo."));
+                                ImGui::Text("%s", TR("Violet Recomp downloads it from GitHub, replaces its program files and opens again.",
+                                                     "O Violet Recomp baixa a versão nova do GitHub, troca os arquivos do programa e abre de novo."));
                             ImGui::TextDisabled("%s", TR("Saves, mods, settings and the compiled game are kept as they are.",
                                                          "Saves, mods, configurações e o jogo já compilado ficam como estão."));
                             ImGui::Spacing();
