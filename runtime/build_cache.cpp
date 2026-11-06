@@ -2,6 +2,7 @@
 // Generated source and logs survive interruption, but are removed after successful publication.
 #include "build_cache.h"
 #include "cache_sha256.h"
+#include "game_target.h"
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -115,8 +116,15 @@ bool valid_stem(const std::string &s) {
     return !s.empty() && s.size() < 64 &&
            s.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos;
 }
+bool valid_module(const char *module) {
+#define MODULE_NAME(name, base, hle) #name,
+    static const char *const names[] = {GAME_MODULES(MODULE_NAME)};
+#undef MODULE_NAME
+    for (const char *name : names) if (!strcmp(name, module)) return true;
+    return false;
+}
 std::string generation(BuildCache *c, const char *module, int chunks) {
-    need((!strcmp(module, "main") || !strcmp(module, "sdk")) && chunks > 0 && chunks <= 10000,
+    need(valid_module(module) && chunks > 0 && chunks <= 10000,
          "Invalid generated module.");
     std::ostringstream out;
     out << "LASGEN1\n" << chunks << '\n';
@@ -227,7 +235,7 @@ void remove_tree(const fs::path &p) {
     char why[1024];
     snprintf(why, sizeof why,
              "Windows does not let the game delete %s (%s, error %lu). Close other programs using this folder "
-             "(an antivirus scan, OneDrive or another ZA Recomp window) or move the ZA Recomp folder somewhere "
+             "(an antivirus scan, OneDrive or another Violet Recomp window) or move the Violet Recomp folder somewhere "
              "outside OneDrive, then try again.",
              p.u8string().c_str(), what.c_str(), (unsigned long)last);
     throw std::runtime_error(why);
@@ -303,8 +311,12 @@ extern "C" bool build_cache_prepare_generation(BuildCache *c, const char *spec, 
         std::string identity = "LASGENKEY1\n" + key.finish() + "\n";
         auto record = c->root / "generation-identity";
         if (!fs::exists(record) || read(record, 128) != identity) {
-            for (const char *name : {"main.generation", "sdk.generation", "main", "sdk"})
+#define MODULE_NAME(name, base, hle) #name,
+            for (const char *name : {GAME_MODULES(MODULE_NAME)}) {
+                remove_tree(c->root / (std::string(name) + ".generation"));
                 remove_tree(c->root / name);
+            }
+#undef MODULE_NAME
             write(record, identity);
         }
         return true;
@@ -340,7 +352,7 @@ extern "C" bool build_cache_present(const char *game_dir) {
 }
 extern "C" bool build_cache_generation(BuildCache *c, const char *module, int *chunks) {
     try {
-        need(!strcmp(module, "main") || !strcmp(module, "sdk"), "Invalid module name.");
+        need(valid_module(module), "Invalid module name.");
         auto record = read(c->root / (std::string(module) + ".generation"));
         std::istringstream in(record);
         std::string magic;

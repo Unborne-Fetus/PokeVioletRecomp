@@ -6,6 +6,7 @@
 #include <stdio.h>
 
 #include "cpu.h"
+#include "game_target.h"
 #include "platform.h"
 
 // One write per line: stderr is unbuffered (main.c / platform: crash logs aren't lost), and Windows' CRT then wrote a
@@ -34,8 +35,6 @@ static inline void __attribute__((format(printf, 1, 2))) rt_log(const char *fmt,
 #else  // room for an SDK's virtual address memory too (Pokémon Legends Z-A reserves 12 GB; MAP_NORESERVE)
 #define GUEST_HI     0x7800000000ull
 #endif
-#define MAIN_BASE    0x7000000000ull
-#define SDK_BASE     0x7008000000ull   // (128 MB for main: Pokémon Legends Z-A's image is 0x5f7a000)
 #define HLE_BASE     0x7080000000ull   // fake addresses for host-implemented functions
 #define HLE_SIZE     0x0000100000ull
 #define TLS_BASE     0x7090000000ull
@@ -53,7 +52,7 @@ static inline void __attribute__((format(printf, 1, 2))) rt_log(const char *fmt,
 #define HEAP_MAX     0x00D0000000ull   // 3.25 GB
 
 // ---- the game (kernel.c; set from exefs/main.npdm by main.c)
-extern uint64_t g_program_id;  // GetInfo 18, Link's Awakening's by default
+extern uint64_t g_program_id;  // GetInfo 18, Violet's by default (validated against main.npdm before boot)
 extern uint64_t g_system_resource_size;  // GetInfo 16 (META+0x14): non-zero turns on the SDK's virtual address memory
 extern int g_game_is_la;  // it is Link's Awakening: the fixed-address hooks of runtime/hle may run
 

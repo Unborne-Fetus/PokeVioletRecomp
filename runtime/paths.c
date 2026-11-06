@@ -96,7 +96,7 @@ static bool writable(const char *dir) {
 
 static void fail(const char *msg) {
     fprintf(stderr, "%s\n", msg);
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ZA Recomp", msg, NULL);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Violet Recomp", msg, NULL);
     exit(1);
 }
 
@@ -129,11 +129,11 @@ static void default_home(char *root, size_t n) {
 #ifdef _WIN32
     exe_dir(root, n);
 #elif defined(__linux__)
-    // (the AppImage is read-only): $XDG_DATA_HOME/zarecomp, ~/.local/share/zarecomp by default (Pokémon Z-A: its own
+    // (the AppImage is read-only): $XDG_DATA_HOME/violetrecomp, ~/.local/share/violetrecomp by default (Pokémon Z-A: its own
     // folder, not LAS Recomp's lasrecomp/ - both installed would share the game files' folder, saves and larecomp.ini)
     const char *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
-    if (xdg && *xdg == '/') snprintf(root, n, "%s/zarecomp", xdg);
-    else snprintf(root, n, "%s/.local/share/zarecomp", home && *home ? home : "/tmp");
+    if (xdg && *xdg == '/') snprintf(root, n, "%s/violetrecomp", xdg);
+    else snprintf(root, n, "%s/.local/share/violetrecomp", home && *home ? home : "/tmp");
 #else
     const char *home = getenv("HOME");
     snprintf(root, n, "%s/Library/Application Support/" RT_BUNDLE_ID, home && *home ? home : "/tmp");
@@ -322,11 +322,11 @@ void rt_paths_init(void) {
     char msg[1400];
     if (!is_dir(root) || !writable(root) || chdir(root) != 0) {
 #ifdef _WIN32
-        snprintf(msg, sizeof msg, "ZA Recomp can't write to its folder:\n%s\n\nIt keeps game files and saves "
-                 "next to the program. Move the \"ZA Recomp\" folder somewhere you can write to (e.g. Documents or "
+        snprintf(msg, sizeof msg, "Violet Recomp can't write to its folder:\n%s\n\nIt keeps game files and saves "
+                 "next to the program. Move the \"Violet Recomp\" folder somewhere you can write to (e.g. Documents or "
                  "Desktop, not Program Files) and start it again.", root);
 #else
-        snprintf(msg, sizeof msg, "ZA Recomp can't write to its data folder:\n%s", root);
+        snprintf(msg, sizeof msg, "Violet Recomp can't write to its data folder:\n%s", root);
 #endif
         fail(msg);
     }
@@ -334,12 +334,12 @@ void rt_paths_init(void) {
     fprintf(stderr, "[paths] data: %s\n", g_root);
     if (!g_dev && !(env && *env)) finish_moves(g_root, NULL);
     // Pokémon Z-A's release settings (the upscaler, the anti-aliasing, video_recommended = auto...): the app ships them
-    // as za-default.ini (tools/za/dist.sh, dist-linux.sh) and a first run copies them into the data folder as the
+    // as violet-default.ini (tools/za/dist.sh, dist-linux.sh) and a first run copies them into the data folder as the
     // player's larecomp.ini. The release zip no longer holds a larecomp.ini, so unzipping a new version over an install
     // keeps the player's settings (Windows: the zip used to replace them). Not with LARECOMP_SETTINGS (test runs); a
-    // source checkout has no za-default.ini next to its executable, so nothing is copied there.
+    // source checkout has no violet-default.ini next to its executable, so nothing is copied there.
     char def[1100];
-    if (!getenv("LARECOMP_SETTINGS") && !exists("larecomp.ini") && rt_resource("za-default.ini", NULL, def, sizeof def)) {
+    if (!getenv("LARECOMP_SETTINGS") && !exists("larecomp.ini") && rt_resource("violet-default.ini", NULL, def, sizeof def)) {
         FILE *in = fopen(def, "rb"), *out = in ? fopen("larecomp.ini", "wb") : NULL;
         char buf[4096];
         size_t k;

@@ -63,7 +63,7 @@ static void log_system(void) {
              __builtin_cpu_supports("avx2") ? "yes" : "no", __builtin_cpu_supports("fma") ? "yes" : "no",
              __builtin_cpu_supports("bmi2") ? "yes" : "no", gamelib_old_cpu() ? "v2" : "v3");
 #endif
-    rt_launcher_log("[system] ZA Recomp %s | %s | CPU: %s (%d threads%s) | RAM %d GB\n", rt_version(), os, cpu,
+    rt_launcher_log("[system] Violet Recomp %s | %s | CPU: %s (%d threads%s) | RAM %d GB\n", rt_version(), os, cpu,
         SDL_GetNumLogicalCPUCores(), feat, (SDL_GetSystemRAM() + 512) / 1024);
 #ifdef _WIN32
     plat_run_begin();
@@ -78,8 +78,8 @@ static void run_array(Cpu *c, uint64_t arr, uint64_t size) {
     }
 }
 
-// nn::init::Start calls x2 right after nnosInitialize and x3 after nninitStartup, just before
-// nnMain: SDK constructors run early, the game's run once nninitStartup has set up its heap.
+// nn::init::Start calls x2 after nnosInitialize and x3 after nninitStartup. Violet's nninitStartup installs its
+// heap and thread-local allocator: even SDK constructors (newlocale -> the application's malloc) need that first.
 // rtld runs a module's DT_INIT, which registers it (and its TLS template) with musl via
 // __nnmusl_init_dso and then runs its init_array; fall back to the array if there is no DT_INIT.
 static void module_init(Cpu *c, Module *m) {
@@ -92,8 +92,13 @@ static void module_init(Cpu *c, Module *m) {
     else run_array(c, m->init_array, m->init_array_sz);
 }
 
-static void rtld_init_sdk(Cpu *c) { module_init(c, &g_modules[1]); }
-static void rtld_init_main(Cpu *c) { module_init(c, &g_modules[0]); }
+static void rtld_init_sdk(Cpu *c) {
+    (void)c;  // module constructors are deferred until the application's allocators have been installed
+}
+static void rtld_init_main(Cpu *c) {
+    // Initialize the dependencies before their users, after nninitStartup: SDK, multimedia, then main.
+    for (int i = g_nmodules - 1; i >= 0; i--) module_init(c, &g_modules[i]);
+}
 static void rtld_fini(Cpu *c) { (void)c; LOG("nnMain returned\n"); }
 
 // Claim the guest address range before anything else can map there. The host allocator places
@@ -214,7 +219,7 @@ static void boot(const char *root) {
     if (!game_version_select(root, why, sizeof why)) FATAL("%s\n", why);  // (the address table: game_addresses.h)
     if (!gamelib_load(root, why, sizeof why)) FATAL("%s\n", why);
     loader_load(exefs);
-    rando_boot();  // the chosen seed's data patches go into the freshly loaded module
+    if (g_game_is_la) rando_boot();
     { extern void settings_load(void); settings_load(); }
     kernel_init();
     dispatch_init();
@@ -270,7 +275,7 @@ static void log_startup_info(void) {
     char ram[32] = "RAM unknown";
     if (si.ram && tenths % 10) snprintf(ram, sizeof ram, "%llu.%llu GB RAM", tenths / 10, tenths % 10);
     else if (si.ram) snprintf(ram, sizeof ram, "%llu GB RAM", tenths / 10);
-    fprintf(stderr, "[info] ZA Recomp %s, %s, %s%s, %s%s%s\n", larecomp_version(), si.os[0] ? si.os : "unknown OS",
+    fprintf(stderr, "[info] Violet Recomp %s, %s, %s%s, %s%s%s\n", larecomp_version(), si.os[0] ? si.os : "unknown OS",
             si.cpu[0] ? si.cpu : "unknown CPU", cores, ram, si.package ? ", " : "", si.package ? si.package : "");
 }
 
@@ -304,45 +309,24 @@ int main(int argc, char **argv) {
     }
     rt_paths_init();  // the data root becomes the working directory (runtime/paths.h)
     launcher_log_open();
-    {   // Pokémon Legends Z-A (exefs/main build 7222e13ecf6adb32: 1.0.0, 8a1c86c437394b69: 2.0.0,
-        // b1f12fd919eae86a: 2.0.2): the start screen sets its files up from the player's packages (zaimport). Started
-        // without a log redirect (a double click): the log goes to logs/play.log (the previous one: logs/play-anterior.log).
-        static const uint8_t za_build[][8] = {{0x72, 0x22, 0xe1, 0x3e, 0xcf, 0x6a, 0xdb, 0x32},
-                                              {0x8a, 0x1c, 0x86, 0xc4, 0x37, 0x39, 0x4b, 0x69},
-                                              {0xb1, 0xf1, 0x2f, 0xd9, 0x19, 0xea, 0xe8, 0x6a}};
-        char mp[1100];
-        uint8_t id[8] = {0};
-        snprintf(mp, sizeof mp, "%s/exefs/main", root);
-        FILE *f = fopen(mp, "rb");
-        if (f) { fseek(f, 0x40, SEEK_SET); if (fread(id, 1, 8, f) != 8) memset(id, 0, 8); fclose(f); }
-        if (!memcmp(id, za_build[0], 8) || !memcmp(id, za_build[1], 8) || !memcmp(id, za_build[2], 8)) {
-            // (the start screen is ZA Recomp's own since v0.1.9: shown on every start, set up or not - Play,
-            // Mods, Saves; --play still goes straight into the game)
 #ifdef _WIN32
-            extern int rt_stderr_is_console(void);
-            if (rt_stderr_is_console()) {
-                SDL_CreateDirectory("logs");
-                // A session that ended in a crash keeps its log aside (logs/crash-<date>.log, the last 3): two more
-                // starts rotated it away before (#151: the first start after the recompile crashed, its play.log gone
-                // by the time the player looked) - platform/windows.c
-                extern void plat_keep_crash_log(void);
-                plat_keep_crash_log();
-                remove("logs/play-anterior.log");
-                rename("logs/play.log", "logs/play-anterior.log");
-                if (freopen("logs/play.log", "w", stderr)) {
-                    setvbuf(stderr, NULL, _IONBF, 0);
-                    extern void rt_log_moved(const char *path);
-                    rt_log_moved("logs/play.log");  // (the crash dialog's "Log file:")
-                }
+    {   // A double-clicked game keeps its play log independently of the launcher log.
+        extern int rt_stderr_is_console(void);
+        if (rt_stderr_is_console()) {
+            SDL_CreateDirectory("logs");
+            // A session that ended in a crash keeps its log aside (logs/crash-<date>.log, the last 3).
+            extern void plat_keep_crash_log(void);
+            plat_keep_crash_log();
+            remove("logs/play-anterior.log");
+            rename("logs/play.log", "logs/play-anterior.log");
+            if (freopen("logs/play.log", "w", stderr)) {
+                setvbuf(stderr, NULL, _IONBF, 0);
+                extern void rt_log_moved(const char *path);
+                rt_log_moved("logs/play.log");  // (the crash dialog's "Log file:")
             }
-#endif
-            // the button icons, if this copy never got them (set up before they existed): made aside for the next
-            // start (runtime/ui/launcher.mm; not in scripted runs, which compare pictures)
-            extern void launcher_prompts_kick(const char *root);
-            if (skip_launcher && !getenv("LARECOMP_INPUT") && !getenv("LARECOMP_HOST_INPUT"))
-                launcher_prompts_kick(root);
         }
     }
+#endif
     log_system();
     for (bool title = !skip_launcher;;) {
         if (title && no_launcher) {

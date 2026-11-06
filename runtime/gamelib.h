@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "cpu.h"
+#include "game_target.h"
 
 #if defined(_WIN32)
 #define GAMELIB_NAME "lasgame.dll"
@@ -27,7 +28,7 @@
 #ifndef GAMELIB_ID
 #define GAMELIB_ID "dev"
 #endif
-#define GAMELIB_ABI 1
+#define GAMELIB_ABI 2
 #define GAMELIB_FULL_ID_SIZE 96
 
 bool gamelib_old_cpu(void);  // runtime/gamelib.c: no AVX2 / FMA / BMI2 - the game code is built for x86-64-v2
@@ -48,11 +49,16 @@ static inline bool gamelib_full_id(const char *game_dir, char *out, size_t size)
 }
 
 typedef struct {
+    const char *name;
+    const uint64_t *addrs;  // sorted guest addresses
+    const GuestFn *fns;
+    const uint64_t *count;
+} GameLibModule;
+typedef struct {
     uint32_t abi;    // GAMELIB_ABI
     const char *id;  // GAMELIB_ID-<build ID> (gamelib_full_id)
-    const uint64_t *main_addrs, *sdk_addrs;  // sorted guest addresses
-    const GuestFn *main_fns, *sdk_fns;       // the functions at them
-    const uint64_t *main_count, *sdk_count;
+    uint32_t module_count;
+    const GameLibModule *modules;
 } GameLibTables;
 
 // The library's one exported function (tools/gamelib_entry.c).

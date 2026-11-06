@@ -37,7 +37,7 @@
 // zig's caches live in the install folder (zig-cache), but under Wine / Proton zig can fail to make its manifest files
 // there: "checking cache failed: manifest_create Unexpected" on the first file, every build (#165: a Steam Deck, the
 // folder in the Linux home through Z:, and on another drive H:), where zig doesn't know the error Wine gave back. Once
-// per build the caches move to the user's own local folder (%LOCALAPPDATA%\ZA Recomp\zig-cache: inside the Wine
+// per build the caches move to the user's own local folder (%LOCALAPPDATA%\Violet Recomp\zig-cache: inside the Wine
 // prefix's C: drive; else the temp folder) and that file is compiled again. Logged with zig's message.
 static int zig_cache_moved;
 static bool zig_cache_elsewhere(const char *msg) {
@@ -47,7 +47,7 @@ static bool zig_cache_elsewhere(const char *msg) {
     if (!base || !*base) base = getenv("TMPDIR");
     if (!base || !*base) return false;
     char d[1200];
-    snprintf(d, sizeof d, "%s" SEP "ZA Recomp", base);
+    snprintf(d, sizeof d, "%s" SEP "Violet Recomp", base);
     mkdir(d, 0755);
     strlcat(d, SEP "zig-cache", sizeof d);
     mkdir(d, 0755);
@@ -159,7 +159,7 @@ static bool find_tools(Tools *t) {
         return false;
     e = getenv("LARECOMP_CC");
     if (e && *e) snprintf(t->cc, sizeof t->cc, "%s", e);
-    else if (rt_resource("zig" SEP "zig" PLAT_EXE_SUFFIX, NULL, t->cc, sizeof t->cc)) t->zig = true;
+    else if (rt_resource("zig" SEP "zig" PLAT_EXE_SUFFIX, "build/zig/zig" PLAT_EXE_SUFFIX, t->cc, sizeof t->cc)) t->zig = true;
 #ifndef _WIN32
     else if (rt_dev_mode() && file_exists("/usr/bin/clang")) snprintf(t->cc, sizeof t->cc, "/usr/bin/clang");
 #endif
@@ -219,7 +219,8 @@ typedef struct {
 } Gen;
 
 static PlatProc gen_start(const Tools *t, const Gen *g, int i, const char *game_dir) {
-    static const char *const base[2] = {"0x7000000000", "0x7008000000"};
+    char base[32];
+    snprintf(base, sizeof base, "0x%llx", (unsigned long long)g_game_modules[i].base);
     char nso[1100];
     snprintf(nso, sizeof nso, "%s" SEP "exefs" SEP "%s", game_dir, g->name);
     Args a = {0};
@@ -227,9 +228,9 @@ static PlatProc gen_start(const Tools *t, const Gen *g, int i, const char *game_
     if (t->gen_script[0]) add(&a, t->gen_script);
     add(&a, g->name);
     add(&a, nso);
-    add(&a, base[i]);
+    add(&a, base);
     add(&a, g->out);
-    if (i == 1) { add(&a, "--hle"); add(&a, t->hle); }
+    if (g_game_modules[i].hle) { add(&a, "--hle"); add(&a, t->hle); }
     PlatProc p = spawn(a.v, g->log);
     args_free(&a);
     return p;
@@ -318,7 +319,7 @@ static void helper_failed(const char *what, int r, const char *log, char *why, s
         // (nothing written at all: not disk space, which is what the start screen would say next - something stopped it as
         // it started, or it crashed there: #99, a generator that worked on every other PC. gamebuild_killed: this text is shown)
         snprintf(why, why_size, "A build helper stopped as soon as it started. An antivirus or Windows' exploit protection can "
-                 "do this: add the ZA Recomp folder as an exception and try again.");
+                 "do this: add the Violet Recomp folder as an exception and try again.");
         g_killed = true;
     }
     LOG("[gamebuild] %s failed: %s%s%s\n", what, how, how[0] && last[0] ? ": " : "", last);
@@ -452,27 +453,31 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
     }
     Tools t;
     if (!find_tools(&t)) {
-        snprintf(why, why_size, "the game code builder is missing from this copy of ZA Recomp");
+        snprintf(why, why_size, "the game code builder is missing from this copy of Violet Recomp");
         return false;
     }
     char work[1100], tmp[1100];
     snprintf(work, sizeof work, "%s" SEP ".gamebuild", game_dir);
     snprintf(tmp, sizeof tmp, "%s" SEP "%s.tmp", work, GAMELIB_NAME);
-    char input_paths[6][1100], spec[4096];
-    snprintf(input_paths[0], sizeof input_paths[0], "%s" SEP "exefs" SEP "main", game_dir);
-    snprintf(input_paths[1], sizeof input_paths[1], "%s" SEP "exefs" SEP "sdk", game_dir);
-    const char *headers[] = {"cpu.h", "simd.h", "simd_fp.h", "gamelib.h"};
-    for (int i = 0; i < 4; ++i) snprintf(input_paths[i+2], sizeof input_paths[i+2], "%s" SEP "%s", t.inc, headers[i]);
+    enum { HEADER_COUNT = 5 };
+    char input_paths[GAME_MODULE_COUNT + HEADER_COUNT][1100], spec[4096];
+    for (int i = 0; i < GAME_MODULE_COUNT; i++)
+        snprintf(input_paths[i], sizeof input_paths[i], "%s" SEP "exefs" SEP "%s", game_dir, g_game_modules[i].name);
+    const char *headers[] = {"cpu.h", "simd.h", "simd_fp.h", "gamelib.h", "game_target.h"};
+    for (int i = 0; i < HEADER_COUNT; ++i)
+        snprintf(input_paths[i+GAME_MODULE_COUNT], sizeof input_paths[0], "%s" SEP "%s", t.inc, headers[i]);
     // Generator changes should rebuild only chunks whose C changed, as in the existing incremental builder.
     // Compiler/header/flag changes invalidate every object; entry always rebuilds because it embeds the library id.
-    const char *inputs[] = {input_paths[2], input_paths[3], input_paths[4], input_paths[5], t.cc};
+    const char *inputs[HEADER_COUNT + 1];
+    for (int i = 0; i < HEADER_COUNT; i++) inputs[i] = input_paths[i+GAME_MODULE_COUNT];
+    inputs[HEADER_COUNT] = t.cc;
     // The compiler's contents identify it, so relocating the app does not discard reusable objects.
-    snprintf(spec, sizeof spec, "LASBUILD3\n%s\n%s\n%s\nzig=%d pointer=%d%s%s\n", GAMELIB_BASE_ID,
+    snprintf(spec, sizeof spec, "VIOLETBUILD4\n%s\n%s\n%s\nzig=%d pointer=%d%s%s\n", GAMELIB_BASE_ID,
              GAMELIB_CFLAGS, GAMELIB_SHARED, t.zig, (int)sizeof(void *),  // (+ the Linux zig target: objects from
              t.zig && ZIG_TARGET[0] ? " target=" : "", t.zig ? ZIG_TARGET : "");  // before it are rebuilt once)
     if (o->progress) o->progress(0, "Checking completed build files...");
     bool resuming = build_cache_resumable(game_dir);  // (a cancelled or interrupted build; read before open marks this one)
-    BuildCache *cache = build_cache_open(game_dir, spec, inputs, 5, why, why_size);
+    BuildCache *cache = build_cache_open(game_dir, spec, inputs, HEADER_COUNT + 1, why, why_size);
     if (!cache) return false;
     // an update keeps the last good build's objects (open drops them when compiler, headers or flags changed)
     bool update = false;
@@ -482,8 +487,11 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         snprintf(rp, sizeof rp, "%s" SEP "gamelib_entry.receipt", work);
         update = stat(rp, &st) == 0;
     }
-    const char *gen_inputs[5] = {input_paths[0], input_paths[1], t.gen, t.hle};
-    int ngen = 4;
+    const char *gen_inputs[GAME_MODULE_COUNT + 3];
+    int ngen = 0;
+    for (int i = 0; i < GAME_MODULE_COUNT; i++) gen_inputs[ngen++] = input_paths[i];
+    gen_inputs[ngen++] = t.gen;
+    gen_inputs[ngen++] = t.hle;
     if (t.gen_script[0]) gen_inputs[ngen++] = t.gen_script;
     if (!build_cache_prepare_generation(cache, GAMELIB_ID, gen_inputs, ngen, why, why_size)) {
         build_cache_failed(cache);
@@ -514,11 +522,12 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         t.cc, t.zig ? " cc" : "", o->jobs);
     if (gamelib_old_cpu()) LOG("[gamebuild] CPU without AVX2 / FMA / BMI2: built for x86-64-v2\n");
 
-    // 1. the generator, both modules at once; their finished files are compiled while it goes on
-    Gen gens[2] = {{.name = "main"}, {.name = "sdk"}};
+    // 1. all modules at once; their finished files are compiled while generation goes on
+    Gen gens[GAME_MODULE_COUNT] = {0};
     bool ok = true;
-    for (int i = 0; i < 2 && ok; i++) {
+    for (int i = 0; i < GAME_MODULE_COUNT && ok; i++) {
         Gen *g = &gens[i];
+        g->name = g_game_modules[i].name;
         g->exit = -1;
         snprintf(g->log, sizeof g->log, "%s" SEP "gen_%s.log", work, g->name);
         snprintf(g->out, sizeof g->out, "%s" SEP "%s", work, g->name);
@@ -532,8 +541,8 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
     }
 
     Units units = {0};
-    int queued[2] = {0, 0};  // chunk files of each module put in units so far
-    bool tables[2] = {false, false};
+    int queued[GAME_MODULE_COUNT] = {0};  // chunk files of each module put in units so far
+    bool tables[GAME_MODULE_COUNT] = {false};
     int next = 0, jobs = o->jobs < 1 ? 1 : o->jobs > 64 ? 64 : o->jobs;
     struct { PlatProc p; int unit; } run[64];
     int nrun = 0;
@@ -551,7 +560,7 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         bool gens_done = true;
         double gen_frac = 0;
         unsigned long long written = 0;
-        for (int i = 0; i < 2; i++) {
+        for (int i = 0; i < GAME_MODULE_COUNT; i++) {
             Gen *g = &gens[i];
             if (g->exit < 0) {
                 read_gen_log(g);
@@ -593,7 +602,7 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
                 add_unit(&units, src, work, stem);
                 tables[i] = true;
             }
-            gen_frac += g->exit == 0 ? 0.5 : g->n ? 0.5 * (double)g->ci / (double)g->n : 0;
+            gen_frac += (g->exit == 0 ? 1.0 : g->n ? (double)g->ci / (double)g->n : 0) / GAME_MODULE_COUNT;
         }
         if (!ok) break;
         for (int k = 0; k < units.n; k++) written += units.u[k].bytes;
@@ -672,7 +681,7 @@ bool gamebuild_run(const char *game_dir, const GameBuildOpts *o, char *why, size
         sleep_ms(50);
     }
     for (int k = 0; k < nrun; k++) stop(run[k].p);  // (a failure: the rest is of no use - the failure shows at once)
-    for (int i = 0; i < 2; i++)
+    for (int i = 0; i < GAME_MODULE_COUNT; i++)
         if (gens[i].p && gens[i].exit < 0) stop(gens[i].p);
 
     // 2. link

@@ -86,6 +86,17 @@ static const GameLibTables *open_lib(const char *path, const char *want) {
         snprintf(g_error, sizeof g_error, "%s was built for another version", path);
         return NULL;  // (left loaded: nothing of it runs)
     }
+    if (t->module_count != GAME_MODULE_COUNT || !t->modules) {
+        snprintf(g_error, sizeof g_error, "%s has an incomplete module table", path);
+        return NULL;
+    }
+    for (unsigned i = 0; i < t->module_count; i++) {
+        const GameLibModule *m = &t->modules[i];
+        if (!m->name || strcmp(m->name, g_game_modules[i].name) || !m->addrs || !m->fns || !m->count || !*m->count) {
+            snprintf(g_error, sizeof g_error, "%s has an invalid %s function table", path, g_game_modules[i].name);
+            return NULL;
+        }
+    }
     return t;
 }
 
@@ -111,8 +122,11 @@ bool gamelib_load(const char *game_dir, char *why, size_t why_size) {
                 continue;
             }
             g_tables = open_lib(c[i], want);
-            if (g_tables) LOG("[gamelib] %s (%llu + %llu functions)\n", c[i], (unsigned long long)*g_tables->main_count,
-                              (unsigned long long)*g_tables->sdk_count);
+            if (g_tables) {
+                uint64_t count = 0;
+                for (unsigned j = 0; j < g_tables->module_count; j++) count += *g_tables->modules[j].count;
+                LOG("[gamelib] %s (%u modules, %llu functions)\n", c[i], g_tables->module_count, (unsigned long long)count);
+            }
         }
     }
     if (!g_tables && why) snprintf(why, why_size, "%s", g_error);

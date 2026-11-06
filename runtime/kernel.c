@@ -461,8 +461,8 @@ static void mutex_release(uint64_t addr) {
 }
 
 KThread *g_waitlist;
-uint64_t g_program_id = 0x01006BB00C6F0000ull;
-int g_game_is_la = 1;
+uint64_t g_program_id = GAME_PROGRAM_ID;
+int g_game_is_la = 0;
 uint64_t g_system_resource_size;
 static uint64_t g_user_exception_ctx;  // GetInfo 20 (in the HLE heap: gone with it on a reboot)
 RT_ON_RESET(user_exception_ctx_reset) { g_user_exception_ctx = 0; }

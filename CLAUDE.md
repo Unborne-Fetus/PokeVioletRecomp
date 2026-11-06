@@ -1,114 +1,41 @@
-# ZA Recomp: notes for Claude
+# Violet Recomp development notes
 
-A static-recompilation PC port of Pokémon Legends: Z-A, forked from LAS Recomp (Zelda: Link's Awakening, by
-Peiikai). The game's ARM64 code is turned into C ahead of time; the runtime re-implements the Switch's OS and its GPU
-(NVN -> Vulkan). Supported game versions: 1.0.0, 2.0.0, 2.0.2. Development branch: `pokemon-za`.
+This checkout is a fresh fork of ZA Recomp being retargeted to Pokémon Violet. Do not reuse assumptions, game addresses or generated files from an earlier Violet project. Gameplay has not been verified.
 
-Machine-specific paths (game files, install folder) are in `CLAUDE.local.md` when present.
+## Target and inputs
 
-## Where things are
+- Violet program ID: `01008F6008C5E000`. Update: `01008F6008C5E800`; DLC family: `01008F6008C5Fxxx`.
+- `runtime/game_target.h`: title, module list and guest bases. `runtime/violet_versions.h`: verified build IDs for 1.0.0 and 4.0.0. `tools/violet_target.py` reads those same headers, including from the frozen generator's resources.
+- Every target check must validate `main.npdm`, main's complete 20-byte build ID and all three matching NSOs. Do not fall back to another game's addresses or accept a build from its filename.
+- `tools/zaimport/Program.cs` is now Violet's importer. Its historical name is retained for launcher/build compatibility. It reads XCI/NSP packages and applies updates/DLC automatically; manual extraction is not required.
+- `tools/violet/prepare.ps1`: reproducible preparation; `-InspectOnly` reads ExeFS into a scratch folder, `-Generate` also translates the game.
 
-- `tools/gen.py`, `lifter.py`, `analyze.py`, `patches.py`, `simd_c.py`, `flagfuse.py`, `za_patches.py`: the generator,
-  which turns ARM64 into C. Players' machines run it from the start screen (`runtime/gamebuild.c`). `flagfuse.py`
-  fuses a compare with its branch when nothing else reads the flags (a flag-liveness pass; Z-A's battle-loading freeze
-  1.36 s -> 0.6 s); `regpromote.py` keeps x19..x28 in C locals (callee-saved: written back only at exits). (`tools/passes.py`
-  is a log summarizer, not part of the generator.)
-- Dev rebuild of the game code: `cd tools && PYTHONUTF8=1 ../build/gen-venv/Scripts/python.exe gen.py main
-  ../testroot/extracted/exefs/main 0x7000000000 ../generated/main --simd c` (and `sdk ... 0x7008000000 ../generated/sdk
-  --hle ../runtime/hle/hle_symbols.txt`), then `make ... build/za-dist/lasgame.dll` (~20 min).
-- `runtime/kernel.c`: threads, mutexes and condvars, the address arbiter, the memory map, SVCs.
-- `runtime/services/fs.c`: the RomFS, the mod layers (`mods/<name>/romfs`, with `arc/data.trpfd` unlisting) and the
-  save files (`save/save_0/`).
-- `runtime/nvn/rqueue.c`: the render thread. `nvnQueueSubmitCommands` queues the call's lists (one item:
-  `rq_submit_lists`) and returns; the render thread translates them. Fences are item numbers.
-- `runtime/nvn/vulkan/exec.c`: command-list translation, per draw: pipeline key (with a memo), descriptor sets (reused
-  while their contents repeat), uniforms. Also GMEM_FAST (compute-buffer copies with a merge copy-back,
-  `gfast_merge.comp`), the vertex cache, page-write tracking, and Z-A's guest window (`gwin`: Z-A has no heap).
-- `runtime/nvn/vulkan/record.c`: the recorder thread. Every `vkCmd*` / descriptor / queue call goes through a `rec_*`
-  wrapper - never call `vkCmd*` directly from translation code (a race with the recorder).
-- `runtime/nvn/vulkan/textures.c`: texture upload and change checks. Unpacking (deswizzle) is queued and done on a
-  few threads just before the submission (`vk_tex_unpack_finish`, `LARECOMP_TEX_UNPACK_THREADS`). Textures are
-  uploaded when the game registers them (`backend_prefetch_texture`, a render-queue item from
-  `nvnTexturePoolRegisterTexture`; `LARECOMP_TEX_PREFETCH=0` off): a battle's textures load during its loading
-  freeze, not on its first frame. Costs ~350 MB more GPU memory.
-- `runtime/nvn/shader_prep.c` / `shader_seen.c`: shader preparation. Z-A records every variant it builds
-  (`cache/shader_seen.txt`) and its shader code (`cache/shader_code.bin`, the player's own data, never shipped), and
-  prepares them at its GPU device setup (`shader_prep_boot`, ~0.2 s warm; `LARECOMP_SHADER_PREP=0` off). Not from the
-  start screen: before boot the guest memory window is Zelda's and the translations would bake the wrong one in.
-- `runtime/crash_explain.c`: the crash dialog's plain-language explanation.
-- `runtime/nvn/vulkan/device.c`: present, `[mem]` and `[scale]` log lines, screenshots.
-- `runtime/nvn/maxwell/translate.c`: Maxwell shader -> GLSL/MSL.
-- `runtime/ui/launcher.mm`: the start screen (game-file setup, save import, update check).
-- `runtime/ui/menu.mm`: the F1 settings menu.
-- `runtime/hle/*`: host-side function hooks. The Zelda-only ones (warp, souls, digs, rando, cheats...) read Zelda
-  addresses through `GA()` (`runtime/game_addresses.h`); for Z-A that table is Zelda 1.0.0's and the hooks are gated
-  off by `g_game_is_la`. Any new per-frame or per-draw code that reads or writes `GA()` must check it.
-- Merged from upstream LAS Recomp (`peiikai` remote) on 2026-10-26: Z-A-specific decisions are marked "Pokémon Z-A"
-  in comments (saves written in place, no heap chunks, pacer off, `tools/za_patches.py`).
-- Issue numbers in comments that came from upstream (`issue #205`, `#19`, ...) are LAS Recomp's
-  (github.com/peiikai/LASRecomp/issues), not this repository's: kept as they are so upstream merges stay clean.
-  Link's Awakening-only code (randomizer, cosmetics, hint sheet, LiveSplit, `runtime/nvn/shader_variants.txt`...) is
-  kept for the same reason; it is gated off for Pokémon Z-A (`g_game_is_la`, and the menus' `menu_la_rows()`).
-- `runtime/ui/launcher.mm` is ZA Recomp's own start screen (not upstream's): upstream launcher changes are ported by
-  hand. Never delete `romfs.bin` there - for Pokémon Z-A it is the game's only data (zaimport writes no romfs/).
-- `tools/za/`: Z-A scripts (perf runs, log watcher, stack symbolizer, texture and font tools).
-- `tools/devtools/`, `tools/za/replay-*.sh`, `runtime/ui/devtools.mm`: ZA DevTools, record and replay, frame capture
-  analysis (`docs/dev-tools.md`). Off unless `LARECOMP_DEVTOOLS=1` or their own variables are set.
+## Compilation and runtime
 
-## Building (Windows, Git Bash)
+- Modules: main at `0x7000000000`, multimedia/subsdk0 at `0x7006000000`, SDK at `0x7008000000`. Keep `GAME_MODULES` authoritative across loading, generation, cache bookkeeping and library entry tables.
+- `tools/gen_all.py` drives all modules; `tools/gen.py` uses Violet's original instructions with no Z-A/Zelda/randomizer patches. Only SDK uses `runtime/hle/hle_symbols.txt`.
+- `runtime/gamelib.h` ABI 2 represents every module; old upstream two-module libraries are incompatible.
+- Run module constructors after nninitStartup installs Violet's heap/TLS allocators, in dependency order: SDK, multimedia, main. Running SDK constructors in the early callback crashed in main's malloc with TPIDR_EL0 = 0. Do not restore that order or fixed two-module indices.
+- `runtime/gamebuild.c` and `runtime/build_cache.cpp` must retain, invalidate and clean receipts for subsdk0 too. Target/header changes participate in library and object-cache identities.
+- Inherited Zelda helpers remain compiled for upstream maintenance, but `g_game_is_la` starts false and no Zelda address table is selected for Violet.
+- Z-A's FPS hooks, resource/icon generators, battle-layout preparation and party-save decoder are not Violet implementations. Keep them disabled until mapped and verified for a specific Violet build.
+- Runtime resources shipped for game compilation include `game_target.h`; frozen Python resources include both target and version headers.
 
-One-time setup: `tools/setup_windows.ps1` (MSYS2 UCRT64 toolchain). Fast exe rebuild:
+## Validation
 
-    (export PATH="/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH"; make -j"$(nproc)" B=build/za-dist \
-      DEPS="$PWD/build/deps-win" RELEASE=1 GENARCH=-march=x86-64-v3 GENOPT="-O1 -DGUEST_VOLATILE" \
-      build/za-dist/lasrecomp.exe)
+- `tools/test_violet_target.py`: actual C/Python target validation, wrong title, unknown full build IDs, mixed module versions, missing modules and image overlap.
+- `tools/test_violet_modules.py`: production library entry, dispatch and host symbol lookup for all three modules.
+- `tools/test_gamebuild_resume.py`: production build scheduler/cache with tiny generated fixtures, including cancellation/resume, multimedia invalidation and failed-build preservation.
+- `tools/test_build_cache.py`: production cache receipts and filesystem handling.
+- Full local 4.0.0 generation produced 233,286 functions / 1,723 chunks. A generation pass is not evidence of a working native boot.
+- Complete native runtime/game-library builds and a launcher screenshot test passed. The guest now initializes all modules, RomFS/DLC, NVN and audio, but aborts later in startup before the first displayed frame. See docs/VIOLET-PORT.md; do not claim working gameplay.
+- Run controlled boot tests with separate saves/settings. Warn the user before opening a test game window and never kill their running game.
 
-- Keep the PATH change in a subshell: an exported MSYS PATH breaks `cmd` in later commands.
-- `build/za-dist/lasrecomp.exe` has no DLLs next to it, so it can't start from there. Copy `lasrecomp.exe` and
-  `lasrecomp.dll.a` into `build/dist-za/ZA Recomp/` (the test copy) and run that.
-- **`GAMELIB_ID`** (Makefile) hashes the generator sources, `cpu.h`, `simd*.h`, `gamelib.h`, `hle_symbols.txt` and the
-  flags. Changing any of them makes every player recompile the game (10-30 min). Runtime, Vulkan and UI changes
-  don't, so prefer them.
-- LF line endings everywhere (`core.autocrlf=false`, set by the setup script).
+## Working rules
 
-## Testing and debugging
-
-- Test windows ignore keyboard and controller. Warn the user before starting one, and never kill or replace their
-  running game.
-- `tools/za/perf-win.sh`: a scripted run on a scratch copy (never touches the player's save, settings or caches).
-  Takes `GAME=`, `EXE=`, `IN=@<recorded input>`, `SAVE=`, `INI=`, `T=`. Settings and data paths must be absolute
-  Windows paths, or the run silently uses defaults.
-- Record input: `LARECOMP_RECORD_INPUT=<file>`. Replay: `LARECOMP_INPUT=@<file>`.
-- `GAME=<install> tools/za/watch-log.sh`: follows `logs/play.log` live (hitches, errors, crashes, `[shot]`).
-- Profiling:
-  - `LARECOMP_VK_PROF=1`: ms per second by category in the fps line (recorder, set reuse, key memo stats too).
-  - `[slow]` lines: every frame over `LARECOMP_SLOW_FRAME_MS` (default 50) with what it did.
-  - `LARECOMP_SAMPLE=<delay>,<dur>` with `LARECOMP_SAMPLE_EXEC=1`: stack sampling of the command-list thread into
-    `build/stacks.txt`; symbolize it with `tools/za/stacks.py`. Without `_EXEC`: every thread's instruction pointer
-    (~30 Hz each) into `<data root>/build/samples.txt`, for `tools/za/samples.py`. Run with `LARECOMP_RENDER_THREAD=0`
-    to stack-sample the game thread.
-  - `LARECOMP_PROF_SVC=1`: kernel calls over 10 ms, and per-thread call counts (`[svcprof]`).
-  - `LARECOMP_LOG_READS=<file>`: every RomFS read with its time and duration.
-- Windows: never `VirtualQuery` inside the guest window on a hot path. It measures the run of like pages, GBs here,
-  ~15 ms a call (it made every file read 3 ms and every first touch of guest memory slow until 2026-10-27).
-- Test runs read an ini with `fps60 = 0`: pass `LARECOMP_FPS=60`, or the fps line shows 30.
-- In game: F1 opens the menu, F9 dumps the next frame's passes, F10 saves a screenshot to `screenshots/`.
-- Kill switches for recent changes, to bisect visual bugs:
-  - `LARECOMP_VK_GMEM_FAST=0`, `LARECOMP_VK_GFAST_MERGE=0`, `LARECOMP_IB_GUARD=0`, `LARECOMP_VK_CLAMP_COLOR=1`,
-    `LARECOMP_WARP_EMU=0`
-  - `LARECOMP_VK_SUBMIT_EACH=1`, `LARECOMP_VK_BATCH_DRAWS=<n>`
-  - `LARECOMP_RENDER_THREAD=0` (translate on the game thread), `LARECOMP_VK_RECORDER=0`, `LARECOMP_VK_NO_SET_REUSE=1`,
-    `LARECOMP_VK_NO_KEY_MEMO=1`, `LARECOMP_VK_NO_CBUF_LEAN=1`
-  - `LARECOMP_VK_PAGES_OUTSIDE=0`, `LARECOMP_VK_NO_SLOT_MEMO=1`
-  - `LARECOMP_WATER_MODE=0` screen search, `1` SSPR, `2` planar (F1 > Reflection method)
-- Unit and fuzz tests exist (`tools/test_translate.sh`, `test_vk_pipelines.sh`, `test_lift.py`, `test_simd.py`,
-  `test_flagfuse.py`, `test_regpromote.py`) but there is no CI. Most checks are real game runs.
-
-## Rules
-
-- Never commit or attach Nintendo files: game files, `extracted/`, `generated/`, fonts, textures, saves.
-- Mods from GameBanana etc. are not ours to bundle. They go in the player's `mods/` folder only.
-- Comments follow the existing style: dense, explaining *why*, with parenthetical asides and the env var that
-  changes the behaviour. Match it.
-- Guest threads are real host threads, around 150 in Z-A. Any shared kernel state needs a lock (`g_klock`, or
-  `g_mlock` for the memory map).
+- Never commit Nintendo files, keys, extracted data, generated game code, fonts, textures or saves. They stay in ignored directories.
+- Keep LF source line endings (`.gitattributes`).
+- Runtime dependencies: SDL3, FFmpeg, Vulkan, shaderc and the existing bundled libraries. Portable .NET and Zig used locally live under ignored `build/` paths.
+- `tools/violet/build.ps1 -Game` rebuilds the prepared local toolchain; build_config.py creates explicit C exports for Zig (automatic exports were incomplete), correct DATA exports and the giant-function settings. `tools/violet/run.ps1` sets the private DLL search path and runs from this checkout.
+- The scripts under `tools/za/` and most legacy documentation describe upstream Z-A. Do not publish a Violet release using their unmodified Z-A package contents or claims.
+- Runtime UI and updates belong to `Unborne-Fetus/PokeVioletRecomp`; do not point its updater at the upstream Z-A release feed.

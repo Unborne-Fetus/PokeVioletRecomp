@@ -23,7 +23,7 @@ static float g_scale = 1;
 static std::string g_desc_hover, g_desc_focus, g_desc_shown;  // this frame's hovered / selected row, and the last shown
 static std::string g_desc_first;  // the page's first row (shown until a row is selected or hovered)
 
-static const ImU32 kGold = IM_COL32(242, 181, 68, 255);  // (ZA Recomp's gold, as its start screen)
+static const ImU32 kGold = IM_COL32(242, 181, 68, 255);  // (Violet Recomp's gold, as its start screen)
 
 // Upper case, Portuguese's accented letters too (UTF-8 Latin-1: C3 A0..BE -> C3 80..9E, but not ÷)
 static void upper_utf8(std::string &t) {

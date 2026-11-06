@@ -1,4 +1,4 @@
-// zaimport [--title-keys <file>] <prod.keys> <out dir> <package>...: the game files ZA Recomp runs from, made from the player's own Switch
+// zaimport [--title-keys <file>] [--exefs-only] <prod.keys> <out dir> <package>...: the game files Violet Recomp runs from, made from the player's own Switch
 // packages (.xci / .nsp: base game, update, DLC) and keys, as the console mounts them: <out>/exefs/ (the update's when
 // there is one), <out>/romfs.bin (the base RomFS with the update applied: BKTR) and <out>/aoc/<title id>.bin (each
 // DLC's RomFS). Title keys come from the packages' tickets, else --title-keys or title.keys next to prod.keys (also
@@ -18,7 +18,7 @@ using LibHac.Tools.FsSystem;
 using LibHac.Tools.FsSystem.NcaUtils;
 using Path = System.IO.Path;
 
-const ulong ZaBase = 0x0100F43008C44000;  // Pokémon Legends Z-A (update: +0x800, DLC: +0x1000 + n)
+const ulong VioletBase = 0x01008F6008C5E000;  // Pokémon Violet (update: +0x800, DLC: +0x1000 + n)
 
 // (the error line is read by the start screen as UTF-8: without this "Pokémon ...nsp" came out as "Pok?mon ...nsp", #96)
 // (a writer of its own: Console.OutputEncoding needs a console, and the start screen starts this without a usable one)
@@ -65,8 +65,14 @@ static string NotAPackage(string pkg)
 static int Run(string[] args)
 {
     string? titleKeys = null;  // (--title-keys: the launcher found it by its contents, whatever its name)
-    if (args.Length >= 2 && args[0] == "--title-keys") (titleKeys, args) = (args[1], args[2..]);
-    if (args.Length < 3) return Fail("usage: zaimport [--title-keys <title.keys>] <prod.keys> <out dir> <package.xci|nsp>...");
+    bool exefsOnly = false;  // developer inspection: read the NSOs without copying the multi-GB RomFS
+    while (args.Length > 0 && args[0].StartsWith("--"))
+    {
+        if (args[0] == "--title-keys" && args.Length >= 2) (titleKeys, args) = (args[1], args[2..]);
+        else if (args[0] == "--exefs-only") { exefsOnly = true; args = args[1..]; }
+        else return Fail($"unknown or incomplete option: {args[0]}");
+    }
+    if (args.Length < 3) return Fail("usage: zaimport [--title-keys <title.keys>] [--exefs-only] <prod.keys> <out dir> <package.xci|nsp>...");
     string keyDir = Path.GetDirectoryName(Path.GetFullPath(args[0]))!;
     titleKeys ??= new[] { "title.keys", "title.keys.txt" }.Select(n => Path.Combine(keyDir, n)).FirstOrDefault(File.Exists);
     var ks = ExternalKeyReader.ReadKeyFile(args[0], titleKeys);
@@ -75,7 +81,7 @@ static int Run(string[] args)
                     "your Switch with Lockpick_RCM and use its prod.keys");
 
     // every NCA of every package (the files stay open: their storages read from them)
-    var ncas = new List<(Nca nca, string name)>();
+    var ncas = new List<(Nca nca, string name, string package)>();
     foreach (var pkg in args.Skip(2))
     {
         var st = new LocalStorage(pkg, FileAccess.Read);
@@ -104,22 +110,23 @@ static int Run(string[] args)
         {
             var f = new UniqueRef<IFile>();
             fs.OpenFile(ref f.Ref, e.FullPath.ToU8Span(), OpenMode.Read).ThrowIfFailure();
-            ncas.Add((new Nca(ks, f.Release().AsStorage()), $"{Path.GetFileName(pkg)}/{e.Name}"));
+            ncas.Add((new Nca(ks, f.Release().AsStorage()), $"{Path.GetFileName(pkg)}/{e.Name}", pkg));
         }
     }
 
     Nca? base_ = null, upd = null;
+    string? basePackage = null, updatePackage = null;
     var dlcs = new List<Nca>();
-    foreach (var (nca, name) in ncas)
+    foreach (var (nca, name, package) in ncas)
     {
         ulong tid = nca.Header.TitleId;
-        if ((tid & ~0x1FFFUL) != ZaBase) continue;
+        if ((tid & ~0x1FFFUL) != VioletBase) continue;
         Console.WriteLine($"{name}: title {tid:x16} {nca.Header.ContentType}");
         if (nca.Header.ContentType == NcaContentType.Program)
         {
             // (the update's program NCA carries the base title id too: its data section is a patch)
-            if (IsPatch(nca)) upd = nca;
-            else if (tid == ZaBase) base_ = nca;
+            if (IsPatch(nca)) { upd = nca; updatePackage = package; }
+            else if (tid == VioletBase) { base_ = nca; basePackage = package; }
         }
         else if (nca.Header.ContentType == NcaContentType.PublicData)
         {
@@ -127,7 +134,7 @@ static int Run(string[] args)
         }
     }
     if (base_ == null)
-        return Fail(ncas.Count == 0 ? "no game packages found" : "the base game of Pokémon Legends Z-A isn't among these files");
+        return Fail(ncas.Count == 0 ? "no game packages found" : "the base game of Pokémon Violet isn't among these files");
     foreach (var n in new[] { base_, upd }.Concat(dlcs))
         if (n != null && n.Header.HasRightsId && !ks.ExternalKeySet.Contains(new RightsId(n.Header.RightsId)))
             return Fail($"no title key for {n.Header.TitleId:x16}: put title.keys from your Switch in the folder with " +
@@ -149,6 +156,30 @@ static int Run(string[] args)
         }
     }
     Console.WriteLine($"exefs from {(upd != null ? "the update" : "the base game")}");
+    var control = ncas.FirstOrDefault(e => e.package == (updatePackage ?? basePackage) &&
+        e.nca.Header.TitleId == VioletBase && e.nca.Header.ContentType == NcaContentType.Control).nca;
+    if (control != null)
+    {
+        using var controlFs = control.OpenFileSystem(NcaSectionType.Data, IntegrityCheckLevel.None);
+        using var nacp = new UniqueRef<IFile>();
+        controlFs.OpenFile(ref nacp.Ref, "/control.nacp".ToU8Span(), OpenMode.Read).ThrowIfFailure();
+        var version = new byte[0x10];
+        nacp.Get.Read(out long got, 0x3060, version).ThrowIfFailure();
+        if (got != version.Length) return Fail("control.nacp has no complete display version");
+        Console.WriteLine($"game version: {System.Text.Encoding.UTF8.GetString(version).TrimEnd('\0')}");
+    }
+    using (var main = File.OpenRead(Path.Combine(outDir, "exefs", "main")))
+    {
+        var header = new byte[0x60];
+        main.ReadExactly(header);
+        if (!header.AsSpan(0, 4).SequenceEqual("NSO0"u8)) return Fail("exefs/main is not an NSO executable");
+        Console.WriteLine($"main build ID: {Convert.ToHexString(header, 0x40, 32)}");
+    }
+    if (exefsOnly)
+    {
+        Console.WriteLine("done: executable inspection only (RomFS not copied)");
+        return 0;
+    }
 
     var images = new List<(IStorage st, string path)>
     {

@@ -337,7 +337,7 @@ void menu_tabs_focus(bool first_tab) {
 }
 int g_tab_request_ext = -1;
 
-// ZA Recomp's look, as its start screen: night blue panels, gold for what's selected, teal for headings
+// Violet Recomp's look, as its start screen: night blue panels, gold for what's selected, teal for headings
 static void style_init(void) {
     ImGuiStyle &s = ImGui::GetStyle();
     ImGui::StyleColorsDark();
@@ -444,7 +444,7 @@ static void drain_events(ImGuiIO &io) {
     }
 }
 
-static bool menu_la_tabs = true;  // tabs_body: Link's Awakening's tabs and rows are shown (false: ZA Recomp's own set)
+static bool menu_la_tabs = true;  // tabs_body: Link's Awakening's tabs and rows are shown (false: Violet Recomp's own set)
 extern "C" bool menu_la_rows(void) { return menu_la_tabs; }  // (runtime/ui/controls_ui.mm)
 extern "C" void renderer_get_scale(float *sx, float *sy);
 extern "C" int input_pad_family(void);  // runtime/hle/input.c
@@ -507,7 +507,7 @@ static void tab_display(bool in_game) {
         // the recommended settings (settings.c) set 60 without it. Shown on the start screen too (saved for the next
         // start); in game only with the frame hook (a supported game version).
         extern bool g_za_frame_hook, g_fps60_fell_back;
-        if (!in_game || g_za_frame_hook) {  // (g_game_is_la stays 1 until the boot: no help on the start screen)
+        if (g_za_frame_hook) {  // the inherited Z-A timing controls require Z-A's verified instruction hooks
             int fr = g_settings.fps60 ? 1 : 0;
             const char *rates[] = {TR("30 fps (Switch)", "30 fps (Switch)"), "60 fps"};
             if (opt_choice(TR("Frame rate", "Taxa de quadros"), &fr, rates, 2, 0,
@@ -1009,9 +1009,9 @@ static void tab_quit(float scale, bool in_game) {
         ask = 0;
     const char *lost = in_game ? TR("\n\nProgress since your last save is lost.", "\n\nO progresso desde o último save se perde.") : "";
     char d1[300], d2[300];
-    snprintf(d1, sizeof d1, "%s%s", TR("Leaves the game and goes back to the ZA Recomp start screen.",
-                                       "Sai do jogo e volta para a tela inicial do ZA Recomp."), lost);
-    snprintf(d2, sizeof d2, "%s%s", TR("Closes ZA Recomp.", "Fecha o ZA Recomp."), lost);
+    snprintf(d1, sizeof d1, "%s%s", TR("Leaves the game and goes back to the Violet Recomp start screen.",
+                                       "Sai do jogo e volta para a tela inicial do Violet Recomp."), lost);
+    snprintf(d2, sizeof d2, "%s%s", TR("Closes Violet Recomp.", "Fecha o Violet Recomp."), lost);
     opt_begin("##quit", scale);
     opt_section(TR("Quit", "Sair"));
     if (!ask) {
@@ -1226,7 +1226,7 @@ static void tabs_body(float scale, bool in_game, void (*prelaunch)(float)) {
     struct Tab { const char *name; int id; bool on; };
     Tab tabs[12];
     int ntabs = 0;
-    // Pokémon Z-A (ZA Recomp's start screen, or the game loaded): Controls, Video, Audio, Game, Quit. Link's Awakening
+    // Pokémon Z-A (Violet Recomp's start screen, or the game loaded): Controls, Video, Audio, Game, Quit. Link's Awakening
     // keeps its own set (randomizer, cheats, warp, save editor...). (ids stay: test hooks)
     menu_la_tabs = in_game && g_game_is_la;
     if (prelaunch) tabs[ntabs++] = {TR("Files", "Arquivos"), -1, true};
@@ -1547,7 +1547,7 @@ void menu_render(void *cmd, uint32_t target_w, uint32_t target_h) {
         ImGui::PushFont(g_menu_font);
         // header as on the start screen's Settings: the title, and a close X in the corner (B / Esc too). ("Title
         // screen" - rt_request_reboot(RT_REBOOT_TITLE) - is to find a new home; user 2026-10-11.)
-        {   // ZA Recomp's mark (a hexagon with a Z, as on the start screen), then the title
+        {   // Violet Recomp's mark (a hexagon with a Z, as on the start screen), then the title
             float u = ImGui::GetFontSize() * 1.15f / 30;
             ImVec2 o = ImGui::GetCursorScreenPos();
             o.y += ImGui::GetFontSize() * 0.35f;

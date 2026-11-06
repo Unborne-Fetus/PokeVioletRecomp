@@ -22,6 +22,7 @@ import regpromote
 from analyze import eh_frame_functions
 from lifter import Insn, Lifter, Unsupported, bits, emit_asm_batch, hx, sext
 from nso import Nso, R_AARCH64_RELATIVE
+from violet_target import MODULES, check_exefs
 
 SCRATCH_MEM = 0x7300000000
 
@@ -560,18 +561,9 @@ class Module:
         return out
 
 
-# tools/patches.py, for Link's Awakening's main module only (its sites are main addresses): loaded in main() once the
-# game version is known from the NSO's build ID (tools/game_addresses.py). Pokémon Legends Z-A: tools/za_patches.py.
+# Violet starts with its original instructions. No Z-A/Link's Awakening patch or randomizer address applies here.
 HOOKS, PATCHES = {}, {}
-from za_patches import ZA_BUILDS, za_patches
-
-import json as _json
-import os as _os
-_rv = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'rando', 'patch_variants.json')
 RANDO_CODE = {}
-if _os.path.exists(_rv):
-    for _a, _ws in _json.load(open(_rv))['code'].items():
-        RANDO_CODE[int(_a, 16)] = [int(_w, 16) for _w in _ws]
 
 
 def write_if_changed(path, text):
@@ -602,24 +594,15 @@ def main():
     args = ap.parse_args()
 
     t0 = time.time()
+    try:
+        version = check_exefs(os.path.dirname(args.nso))
+    except (OSError, ValueError) as e:
+        ap.exit(1, f'{args.name}: {e}\n')
+    bases = {name: base for name, base, _ in MODULES}
+    if args.name not in bases or args.base != bases[args.name]:
+        ap.error('module name/base does not match Violet\'s runtime/game_target.h layout')
     m = Module(args.name, args.nso, args.base, args.simd)
-    global HOOKS, PATCHES
-    main_build = Nso(os.path.join(os.path.dirname(args.nso), 'main')).build_id[:16]
-    if main_build in ZA_BUILDS:  # Pokémon Legends Z-A: its own patches, none of Link's Awakening's (nor its randomizer's)
-        RANDO_CODE.clear()
-        if args.name == 'main':
-            PATCHES.update(za_patches(main_build))
-            print(f'{args.name}: Pokémon Legends Z-A (build {main_build}): {len(PATCHES)} game patch(es)')
-    elif args.name == 'main':
-        import game_addresses
-        try:
-            version = game_addresses.select_build_id(m.nso.build_id)
-        except game_addresses.UnknownGameVersion as e:
-            sys.exit(f'{args.name}: {e}')
-        import patches
-        HOOKS, PATCHES = patches.HOOKS, patches.PATCHES
-        label, build_id = game_addresses.VERSIONS[version]
-        print(f'{args.name}: game version {label} (build {build_id[:16]}), address table {version}', file=sys.stderr)
+    print(f'{args.name}: Pokémon Violet {version} (build {m.nso.build_id[:16]}): no game-specific patches', flush=True)
     starts = m.boundaries()
     hle = {}
     if args.hle and os.path.exists(args.hle):

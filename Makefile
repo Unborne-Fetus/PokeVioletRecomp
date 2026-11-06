@@ -37,14 +37,14 @@ CC       := clang $(MINFLAG) $(CROSS)
 CXX      := clang++ $(MINFLAG) $(CROSS)
 IMGUI    := third_party/imgui
 # GENOPT: the generated code's optimization (-O0 builds in seconds: some lifted functions take clang -O1 minutes)
-GENOPT   ?= -O1
+GENOPT   ?= -O1 -DGUEST_VOLATILE
 GENFLAGS := $(GENOPT) -fno-strict-aliasing -Wno-return-type -Wno-unused-label -fvisibility=hidden -Iruntime
 
 # The game code (made by `make gen` from your own game files) is its own library next to the app (runtime/gamelib.h);
 # the app itself holds none of it
 # (strip: with no generated code the space between the two would be all that's left, and $(if) takes a lone space as
 # true. No comment after the value: make keeps the spaces before it)
-GEN_SRC  := $(strip $(wildcard $(GEN)/main/*.c) $(wildcard $(GEN)/sdk/*.c))
+GEN_SRC  := $(strip $(wildcard $(GEN)/main/*.c) $(wildcard $(GEN)/subsdk0/*.c) $(wildcard $(GEN)/sdk/*.c))
 GEN_OBJ  := $(patsubst %.c,$(B)/obj/%.o,$(patsubst $(GEN)/%,%,$(GEN_SRC))) $(B)/obj/tools/gamelib_entry.o
 RT_SRC   := $(wildcard runtime/*.c runtime/*.cpp) $(wildcard runtime/hle/*.c) $(wildcard runtime/services/*.c) \
             $(wildcard runtime/nvn/*.c) $(wildcard runtime/nvn/maxwell/*.c) runtime/platform/$(PLATFORM).c
@@ -116,9 +116,9 @@ endif
 
 # GAMELIB_ID: what the game code library is built from (the generator, the headers it is compiled against, the
 # flags). A library with another id is rebuilt by the start screen, never loaded.
-GAMELIB_SRCS := tools/game_addresses.py runtime/game_addresses/versions.h $(wildcard runtime/game_addresses/patches_v*.h) tools/gen.py tools/lifter.py tools/analyze.py tools/nso.py tools/passes.py tools/patches.py \
-                tools/simd_c.py tools/flagfuse.py tools/regpromote.py tools/za_patches.py tools/rando/patch_variants.json tools/gamelib_entry.c runtime/hle/hle_symbols.txt \
-                runtime/cpu.h runtime/simd.h runtime/simd_fp.h runtime/gamelib.h
+GAMELIB_SRCS := tools/gen.py tools/lifter.py tools/analyze.py tools/nso.py \
+                tools/simd_c.py tools/flagfuse.py tools/regpromote.py tools/violet_target.py tools/gen_all.py tools/gamelib_entry.c runtime/hle/hle_symbols.txt \
+                runtime/game_target.h runtime/violet_versions.h runtime/cpu.h runtime/simd.h runtime/simd_fp.h runtime/gamelib.h
 GAMELIB_ID := $(shell (cat $(GAMELIB_SRCS); echo '$(GENFLAGS)') | (shasum -a 256 2>/dev/null || sha256sum) | cut -c1-16)
 # The library's own id adds the game's main build ID (what `make gen` generated from: $(GEN)/main/main_build_id.txt),
 # so game code for another game version is never loaded (runtime/gamelib.h gamelib_full_id)
@@ -127,7 +127,7 @@ GAMELIB_FULL_ID := $(GAMELIB_ID)-$(or $(GAMELIB_BUILD),unknown)
 # GAMELIB_BASE_ID: what every compiled piece of it depends on (the headers, the flags, the pinned compiler). The same
 # base keeps the start screen's earlier build pieces: only the pieces whose generated C changed are compiled again
 # (runtime/gamebuild.c). Another base: everything is compiled again.
-GAMELIB_BASE_SRCS := runtime/cpu.h runtime/simd.h runtime/simd_fp.h runtime/gamelib.h tools/fetch_zig.sh
+GAMELIB_BASE_SRCS := runtime/cpu.h runtime/simd.h runtime/simd_fp.h runtime/gamelib.h runtime/game_target.h tools/fetch_zig.sh
 GAMELIB_BASE_ID := $(shell (cat $(GAMELIB_BASE_SRCS); echo '$(GENFLAGS) $(GAMELIB_SHARED)') | \
                      (shasum -a 256 2>/dev/null || sha256sum) | cut -c1-16)
 
@@ -245,8 +245,7 @@ PY := $(firstword $(wildcard tools/venv/bin/python) $(wildcard tools/venv/Script
 # EXEFS: the game's exefs folder (another version's: with its own GEN and B)
 EXEFS ?= extracted/exefs
 gen:
-	cd tools && ../$(PY) gen.py sdk ../$(EXEFS)/sdk 0x7008000000 ../$(GEN)/sdk --hle ../runtime/hle/hle_symbols.txt $(GENSIMD)
-	cd tools && ../$(PY) gen.py main ../$(EXEFS)/main 0x7000000000 ../$(GEN)/main $(GENSIMD)
+	$(PY) tools/gen_all.py $(EXEFS) $(GEN) $(GENSIMD)
 
 gen-objs: $(GEN_OBJ)
 
@@ -301,7 +300,7 @@ dist:
 	tools/zig_slim.sh $(strip $(filter-out -Iruntime,$(GENFLAGS)))  # (zig with its runtime built ahead of time)
 	cp -R build/helper/lasgen "$(DIST)/"
 	cp -R build/zig-slim "$(DIST)/zig"
-	cp runtime/cpu.h runtime/simd.h runtime/simd_fp.h runtime/gamelib.h tools/gamelib_entry.c runtime/hle/hle_symbols.txt \
+	cp runtime/cpu.h runtime/simd.h runtime/simd_fp.h runtime/gamelib.h runtime/game_target.h tools/gamelib_entry.c runtime/hle/hle_symbols.txt \
 	    "$(DIST)/gamelib-src/"
 	cp docs/icon/icon_1024.png "$(DIST)/icon.png"
 	cp third_party/fonts/Baloo2/Baloo2-SemiBold.ttf "$(DIST)/"  # (start screen font, OFL)

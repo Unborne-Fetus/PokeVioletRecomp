@@ -41,6 +41,9 @@ extern "C" void plat_sleep_until_ns(uint64_t t) { auto now=plat_now_ns(); if(t>n
 extern "C" intptr_t plat_spawn(const char *const *a,const char *l,bool append) { return start_cb(a,l,append); }
 extern "C" int plat_proc_wait(intptr_t p,bool block) { return wait_cb(p,block); }
 extern "C" void plat_proc_kill(intptr_t p) { kill_cb(p); }
+extern "C" bool gamelib_old_cpu() { return false; }
+extern "C" void rt_launcher_log(const char *, ...) {}
+extern "C" void plat_mem_free(uint64_t *phys, uint64_t *commit) { *phys=UINT64_C(16)<<30; *commit=UINT64_C(32)<<30; }
 '''
 GENERATOR = r'''
 import pathlib,sys,time
@@ -60,13 +63,14 @@ with tempfile.TemporaryDirectory() as temporary:
     (resources/'tools').mkdir()
     (resources/'build').mkdir()
     (game/'exefs').mkdir(parents=True)
-    for name in ('cpu.h','simd.h','simd_fp.h','gamelib.h'):
+    for name in ('cpu.h','simd.h','simd_fp.h','gamelib.h','game_target.h'):
         (resources/'runtime'/name).write_text('/* fixture header */\n')
     (resources/'tools/gamelib_entry.c').write_text('int cache_entry(void) { return 0; }\n')
     (resources/'runtime/hle/hle_symbols.txt').write_text('fixture\n')
     main = b'NSO0' + bytes(0x3c) + bytes.fromhex('0123456789abcdef') + bytes(0x18) + b'fixture main'  # (the build ID: the library id)
     (game/'exefs/main').write_bytes(main)
     (game/'exefs/sdk').write_bytes(b'fixture sdk')
+    (game/'exefs/subsdk0').write_bytes(b'fixture multimedia')
     generator = tmp/'generator.py'; generator.write_text(GENERATOR)
     cc = shlex.split(os.environ.get('CC','clang'))
     cxx = shlex.split(os.environ.get('CXX','clang++'))
@@ -80,7 +84,7 @@ with tempfile.TemporaryDirectory() as temporary:
         subprocess.run(cc+[str(stub),'-shared','-Wl,--out-implib,'+str(resources/'build/lasrecomp.dll.a'),
                            '-o',str(tmp/'stub.dll')],check=True)
     objects=[]
-    for source in ('runtime/gamebuild.c',):
+    for source in ('runtime/gamebuild.c', 'runtime/game_target.c'):
         obj=tmp/(Path(source).stem+'.o'); objects.append(str(obj))
         subprocess.run(cc+['-std=gnu11','-fPIC','-Iruntime','-DGAMELIB_ID="cache-fixture"',
                            '-DGAMELIB_CFLAGS="-O0 -fPIC"','-DGAMELIB_SHARED="-shared"',
@@ -110,8 +114,9 @@ with tempfile.TemporaryDirectory() as temporary:
         if command[0] == str(relocated): command[0] = compiler
         if command[0]==str(generator): command=[sys.executable,*command]
         elif (fail_compile and '-c' in command) or (fail_link and '-c' not in command):
-            fail_compile=fail_link=False
+            fail_link=False  # a compile failure persists through the production scheduler's retries
             command=[sys.executable,'-c','import sys;print("synthetic failure");sys.exit(7)']
+        elif command[0] == compiler and len(cc) > 1: command = cc + command[1:]
         stream=open(log.decode(),'ab' if append else 'wb')
         try:
             p=subprocess.Popen(command,stdout=stream,stderr=subprocess.STDOUT,
@@ -137,7 +142,7 @@ with tempfile.TemporaryDirectory() as temporary:
     work=game/'.gamebuild'
     @CANCEL
     def cancelled():
-        return (cancel_enabled and (work/'main.generation').exists() and (work/'sdk.generation').exists()
+        return (cancel_enabled and all((work/f'{name}.generation').exists() for name in ('main','subsdk0','sdk'))
                 and len(list(work.glob('*.receipt')))>=2)
     options=Options(progress,1,cancelled)
     library.test_init.argtypes=[ct.c_char_p,SPAWN,WAIT,KILL]
@@ -153,20 +158,20 @@ with tempfile.TemporaryDirectory() as temporary:
     try:
         assert not run() and b'cancelled' in why.value,why.value
         assert (work/'in-progress').exists()
-        saved=len(list(work.glob('*.receipt'))); assert 0<saved<9
+        saved=len(list(work.glob('*.receipt'))); assert 0<saved<13
         cancel_enabled=False
         assert run(),why.value
-        assert not generators() and len(compiles())==10-saved
-        assert not (work/'main').exists() and not (work/'sdk').exists() and not (work/'in-progress').exists()
+        assert not generators() and len(compiles())==14-saved
+        assert all(not (work/name).exists() for name in ('main','subsdk0','sdk','in-progress'))
         output=next(p for p in game.glob('lasgame.*') if p.suffix!='.id')
         before=hashlib.sha256(output.read_bytes()).digest()
         (work/'main_000.o').write_bytes(b'corrupt')
         assert run(),why.value
-        assert len(compiles())==2 and len(generators())==2
+        assert len(compiles())==2 and len(generators())==3
         (work/'main').mkdir()
         (work/'main/main_000.c').write_text('corrupt source\n')
         assert run(),why.value
-        assert len(generators())==2 and len(compiles())==1
+        assert len(generators())==3 and len(compiles())==1
         before=hashlib.sha256(output.read_bytes()).digest() # PE link timestamps may differ after a successful relink
         fail_link=True
         assert not run() and b'link' in why.value,why.value
@@ -175,20 +180,24 @@ with tempfile.TemporaryDirectory() as temporary:
         (work/'sdk_000.o').write_bytes(b'corrupt')
         fail_compile=True
         assert not run(),why.value
+        fail_compile=False
         assert hashlib.sha256(output.read_bytes()).digest()==before
         assert run(),why.value
         assert len(compiles())==2 and not generators()
         (game/'exefs/main').write_bytes(main+b'changed input')
         assert run(),why.value
-        assert len(generators())==2 and len(compiles())==1
+        assert len(generators())==3 and len(compiles())==1
+        (game/'exefs/subsdk0').write_bytes(b'changed multimedia input')
+        assert run(),why.value
+        assert len(generators())==3 and len(compiles())==1
         relocated.parent.mkdir()
         shutil.copy(compiler, relocated) # contents/mode only; macOS system file flags are not part of the identity
         os.environ['LARECOMP_CC'] = str(relocated)
         assert run(),why.value
-        assert len(generators())==2 and len(compiles())==1 # moving the same binary does not recompile every object
+        assert len(generators())==3 and len(compiles())==1 # moving the same binary does not recompile every object
         (resources/'runtime/cpu.h').write_text('/* changed header */\n')
         assert run(),why.value
-        assert len(generators())==2 and len(compiles())==9
+        assert len(generators())==3 and len(compiles())==13
         print('Build scheduler: cancellation/resume, cleanup, repair, failed-build preservation, compiler relocation and invalidation passed')
     finally:
         for pid in list(processes): kill(pid)

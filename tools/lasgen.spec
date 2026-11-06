@@ -14,11 +14,9 @@ a = Analysis(
     [os.path.join(TOOLS, 'gen.py')],
     pathex=[TOOLS],
     binaries=collect_dynamic_libs('capstone'),
-    datas=[(os.path.join(TOOLS, 'rando', 'patch_variants.json'), 'rando'),
-           (os.path.join(TOOLS, '..', 'runtime', 'game_addresses', 'versions.h'), 'runtime/game_addresses')]
-          + [(p, 'runtime/game_addresses')  # (every game version's patch table: gen.py picks one by build ID)
-             for p in sorted(glob.glob(os.path.join(TOOLS, '..', 'runtime', 'game_addresses', 'patches_v*.h')))],
-    hiddenimports=['patches', 'lasgen_uc'],  # (gen.py imports patches once the version is known; lasgen_uc replaces unicorn, from the runtime hook)
+    datas=[(os.path.join(TOOLS, '..', 'runtime', 'game_target.h'), 'runtime'),
+           (os.path.join(TOOLS, '..', 'runtime', 'violet_versions.h'), 'runtime')],
+    hiddenimports=['lasgen_uc'],  # (replaces unicorn, from the runtime hook)
     runtime_hooks=[os.path.join(TOOLS, 'lasgen_utf8.py')],
     excludes=['unicorn', 'tkinter', 'pydoc', 'doctest', 'unittest', 'pdb', 'IPython', 'numpy', 'setuptools', '_distutils_hack',
               'pkg_resources', 'ssl', '_ssl', '_hashlib', '_multibytecodec', '_codecs_cn', '_codecs_hk',

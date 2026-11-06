@@ -83,41 +83,28 @@ static bool is_la_program(const char *exefs) {
 // The game files in game_dir are Link's Awakening's (or none: unknown) - asked before the game boots (exec.c's heap
 // chunk decision at device creation, which the start screen makes before the boot sets g_game_is_la)
 bool game_files_are_la(const char *game_dir) {
-    char exefs[1100];
-    snprintf(exefs, sizeof exefs, "%s/exefs", game_dir);
-    return is_la_program(exefs);
+    (void)game_dir;
+    return false;  // this fork targets Violet, including before any game files have been imported
 }
 
 bool game_version_select(const char *game_dir, char *why, size_t why_size) {
     uint8_t id[20];
     char exefs[1100], path[1100];
     snprintf(exefs, sizeof exefs, "%s/exefs", game_dir);
+    if (!game_target_check_exefs(exefs, why, why_size)) return false;
     snprintf(path, sizeof path, "%s/main", exefs);
     if (!read_build_id(path, id)) {
         snprintf(why, why_size, "the game files' exefs/main is missing or unreadable");
         return false;
     }
     memcpy(g_main_build_id, id, sizeof g_main_build_id);
-    const GameVersion *v = game_version_by_build_id(id);
-    if (!v && !is_la_program(exefs)) {
-        // Another game (Pokémon Legends Z-A): Link's Awakening's hooks stay off (g_game_is_la), and an address read
-        // anyway takes 1.0.0's, as the fixed addresses before these tables did - mapped memory, never address 0
-        g_ga = versions[0].addrs;
-        LOG("[game] not Link's Awakening (main build ID %02X%02X%02X%02X%02X%02X%02X%02X): no address table\n",
-            id[0], id[1], id[2], id[3], id[4], id[5], id[6], id[7]);
-        return true;
-    }
-    if (!v) {
-        snprintf(why, why_size, "these game files are an unsupported version of the game (main build ID "
-                 "%02X%02X%02X%02X%02X%02X%02X%02X): LAS Recomp needs version 1.0.0, 1.0.1 or 1.1.0",
-                 id[0], id[1], id[2], id[3], id[4], id[5], id[6], id[7]);
-        return false;
-    }
-    g_version = v;
-    g_ga = v->addrs;
-    char label[32];
-    LOG("[game] version %s (main build ID %.16s, address table %s)\n",
-        game_release_label(exefs, label, sizeof label), v->build_id, v->key);
+    // The inherited Zelda helpers remain compiled, but no Zelda address is a Violet address.
+    static const GameAddrs disabled = {0};
+    g_ga = &disabled;
+    g_version = NULL;
+    g_game_is_la = 0;
+    const GameTargetVersion *v = game_target_version(id);
+    LOG("[game] Pokémon Violet %s (main build ID %.16s): no game-specific hooks\n", v->label, v->main_id);
     return true;
 }
 

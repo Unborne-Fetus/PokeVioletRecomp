@@ -191,12 +191,11 @@ static void relocate(Module *m) {
 
 void loader_load(const char *exefs) {
     char path[1024];
-    static const struct { const char *name; uint64_t base; } mods[] = {{"main", MAIN_BASE}, {"sdk", SDK_BASE}};
-    for (unsigned i = 0; i < 2; i++) {
+    for (unsigned i = 0; i < GAME_MODULE_COUNT; i++) {
         Module *m = &g_modules[g_nmodules++];
-        m->name = mods[i].name;
+        m->name = g_game_modules[i].name;
         snprintf(path, sizeof path, "%s/%s", exefs, m->name);
-        load_nso(m, path, mods[i].base);
+        load_nso(m, path, g_game_modules[i].base);
     }
     for (int i = 0; i < g_nmodules; i++) relocate(&g_modules[i]);
 }
