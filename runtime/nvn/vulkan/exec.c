@@ -11984,6 +11984,13 @@ static void exec_list(uint64_t handle, int depth) {
 
 // submit: end the submission after this list (else it goes on into the next list's)
 static void execute_one(uint64_t handle, bool submit) {
+    // The guest thread publishes an F9 capture range; select it using the
+    // queued renderer frame here, before ANY draw in the command list.
+    // Previously g_debug_frame was toggled by present_hooks on another thread,
+    // so the captured passes could belong to the wrong frame.
+    extern bool vk_debug_capture_active(uint64_t frame);
+    extern uint64_t renderer_exec_frame(void);
+    g_debug_frame = vk_debug_capture_active(renderer_exec_frame());
     extern void plat_sample_focus(void);  // (runtime/platform.h: LARECOMP_SAMPLE_EXEC samples this thread)
     plat_sample_focus();
     exec_gen++;
