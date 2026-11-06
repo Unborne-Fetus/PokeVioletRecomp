@@ -43,3 +43,12 @@ Local report: `violet-graphics-report-20261106-142020.zip` (109 contact-sheet en
 Verified: first visible full-scene pass already striped; multiple tested overrides ineffective; reported vertex mismatch and device fault exist.
 
 Unverified: precise offending 3D draw, whether source compressed textures already contain artifacts, role of skipped vertex layouts, and whether the GPU fault contributes to stripe rendering.
+
+
+## Subsequent source fixes (awaiting on-device visual validation)
+
+- **Commit `a197e1a`**: Vulkan `texture_info()` now resolves a texture's current depth/stencil copy alias **before** hitting the per-frame sampled-view memo. This prevents reuse of an old image view after aliases change within a frame. This is a renderer correctness fix; it is **not proven** to cause the stripes.
+- **Commit `403d8f8`**: The Maxwell Vulkan fragment translator now consumes SPH `ImapPixelVector` at offset `0x18`, encoding 0 = unused, 1 = constant (flat), 2 = perspective, 3 = screen-linear (noperspective). Previously the code incorrectly derived `flat` from the IPA opcode, never set `noperspective`, and multiplied every IPA PASS input by fragment position W even when the source interpolation was non-perspective. The patch restores type-dependent behavior, leaves the MSL path unchanged, and changes the translation cache version to invalidate old GLSL. The interpolation metadata layout was cross-checked against NVIDIA's public Shader Program Header specification.
+- Linux CI for the full Maxwell source syntax, pure-C SPH mode tests, and source wiring/cache checks passed in run `42312935121`.
+- **Outstanding:** The corrected native Windows binary has not been launched or visually inspected. This is a plausible source-level graphics fix, **not** confirmation the scene striping has disappeared. Avoid making users provide repeated screenshots; test with existing imagery/logs first.
+
