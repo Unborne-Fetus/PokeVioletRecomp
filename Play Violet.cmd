@@ -24,13 +24,14 @@ goto :failure
 :launch_play
 echo Checking native runtime before launching Violet...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\violet\run.ps1" -Play -RebuildRuntime -CaptureCrash
+set "EXIT=%ERRORLEVEL%"
 goto :launched
 :launch_controls
 echo Opening the native Controls editor. Choose Configure inputs to rebind, then return to Play.
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\violet\run.ps1" -OpenControls -RebuildRuntime -CaptureCrash
+set "EXIT=%ERRORLEVEL%"
 goto :launched
 :launched
-set "EXIT=%ERRORLEVEL%"
 if not "%EXIT%"=="0" goto :failure
 popd
 exit /b 0
