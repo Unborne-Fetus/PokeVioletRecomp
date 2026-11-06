@@ -2,7 +2,7 @@
 # A single run uses temporary environment variables, restored on exit.
 [CmdletBinding()]
 param(
-    [ValidateSet('Baseline', 'PackagedZero', 'ConservativeUploads', 'BC5Unsigned', 'Depth32')]
+    [ValidateSet('Baseline', 'PackagedZero', 'ConservativeUploads', 'BC5Unsigned', 'Depth32', 'ShadowCompareOff')]
     [string]$Mode = 'PackagedZero',
     [switch]$DryRun
 )
@@ -14,7 +14,8 @@ $vars = @(
     'LARECOMP_VK_TEX_WATCH',
     'LARECOMP_TEX_FULLHASH',
     'LARECOMP_BC5_UNORM',
-    'LARECOMP_VK_D24'
+    'LARECOMP_VK_D24',
+    'LARECOMP_NO_SHADOW'
 )
 $old = @{}
 foreach ($name in $vars) { $old[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -44,6 +45,13 @@ switch ($Mode) {
         # Diagnostic only: use D32S8 instead of D24S8 on capable GPUs.
         $chosen['LARECOMP_VK_D24'] = '0'
     }
+    'ShadowCompareOff' {
+        # Diagnostic for diagonal surface striping: the Vulkan sampler keeps
+        # comparison enabled but tests ALWAYS instead of reading the shadow
+        # depth value. If diagonal stripes disappear, investigate shadow acne,
+        # depth bias, and comparison reference values. This is not a final fix.
+        $chosen['LARECOMP_NO_SHADOW'] = '1'
+    }
 }
 try {
     foreach ($name in $vars) {
@@ -54,6 +62,9 @@ try {
     Write-Output 'Compare the SAME scene with the baseline screenshots, especially Eevee and the bedroom.'
     if ($Mode -eq 'ConservativeUploads') {
         Write-Warning 'ConservativeUploads can be much slower than normal. This is only a diagnostic.'
+    }
+    if ($Mode -eq 'ShadowCompareOff') {
+        Write-Warning 'Shadow depth comparisons are bypassed in this diagnostic; lighting may look too bright.'
     }
     if ($chosen.Count -eq 0) { Write-Output 'Overrides: none (normal texture paths)' }
     foreach ($name in @($chosen.Keys | Sort-Object)) { Write-Output ("Override: {0}={1}" -f $name, $chosen[$name]) }
