@@ -26,6 +26,7 @@
 #include <string.h>
 
 #include "shader.h"
+#include "pixel_imap.h"
 
 uint64_t maxwell_gmem_base, maxwell_gmem_size;
 uint32_t maxwell_gmem_chunk_shift;  // 0: one buffer for the whole heap (GLSL; shader.h)
@@ -126,6 +127,7 @@ typedef struct {
     bool warned_surface;  // a dropped bindless surface op was noted
     uint32_t flat_mask;           // fragment inputs using constant (flat) interpolation
     uint32_t noperspective_mask;  // fragment inputs using pass (linear) interpolation
+    uint8_t imap[32];            // SPH PixelImap (0x18): 2 bits for each generic varying component
     uint32_t omap_target, omap_depth;
     int tex_slot[8192];           // texture index -> Metal slot + 1
     bool tex_weak[64];            // slot type only guessed (from a size query): the next sample decides
@@ -326,13 +328,21 @@ static void attr_load(Ctx *c, int dst, uint32_t addr, const char *idx) {
                 strcpy(e, comp == 3 ? "0x3f800000u" : "0u");  // not provided by the vertex shader
             } else {
                 c->in_attr_mask |= 1u << a;
-                // IPA "pass" yields attr/w (the shader multiplies by w itself); Metal gives attr. "multiply" is the
-                // pass value times a register - usually w (from the pass of position w: Metal's attr again), but a
-                // shader may pass its own (the Mysterious Woods mist: 1/(v4.w * pos.w), a projective screen lookup)
-                if (c->ipa_mode == 0) sprintf(e, "as_type<uint>(in.v%d[%d] * in.pos.w)", a, comp);
-                else if (c->ipa_mode == 1 && c->ipa_mul != RZ) {
+                // IPA PASS/MULTIPLY returns attribute divided by W only for
+                // perspective inputs. The real interpolation is in the pixel
+                // shader SPH's 32 ImapGenericVector bytes (not IPA's mode).
+                // Screen-linear and flat varyings must not be divided by W.
+                // Preserve MSL spelling/behavior; only GLSL uses the SPH.
+                bool perspective = !c->glsl || nvn_pixel_imap_needs_w(c->imap, (unsigned)a, (unsigned)comp);
+                if (c->ipa_mode == 0) {
+                    if (perspective) sprintf(e, "as_type<uint>(in.v%d[%d] * in.pos.w)", a, comp);
+                    else sprintf(e, "as_type<uint>(in.v%d[%d])", a, comp);
+                } else if (c->ipa_mode == 1 && c->ipa_mul != RZ) {
                     char mb[16];
-                    sprintf(e, "as_type<uint>(in.v%d[%d] * in.pos.w * as_type<float>(%s))", a, comp, reg(c, c->ipa_mul, mb));
+                    if (perspective)
+                        sprintf(e, "as_type<uint>(in.v%d[%d] * in.pos.w * as_type<float>(%s))", a, comp, reg(c, c->ipa_mul, mb));
+                    else
+                        sprintf(e, "as_type<uint>(in.v%d[%d] * as_type<float>(%s))", a, comp, reg(c, c->ipa_mul, mb));
                 } else sprintf(e, "as_type<uint>(in.v%d[%d])", a, comp);
             }
         } else if (addr == 0x3FC) { c->uses_front_facing = true; strcpy(e, "(front_facing ? 0xFFFFFFFFu : 0u)"); }
@@ -1347,7 +1357,10 @@ static void emit_insn(Ctx *c, uint64_t w, uint32_t pc) {
         if (idx) { fail(c, "ipa idx"); }
         if (addr >= 0x80 && addr < 0x280) {
             int at = (addr - 0x80) >> 4;
-            if (mode == 2) c->flat_mask |= 1u << at;
+            // The IPA opcode describes a read operation, not interpolation.
+            // MSL compatibility retains the old mode-based bit; GLSL gets
+            // flat/noperspective qualifiers directly from the SPH instead.
+            if (!c->glsl && mode == 2) c->flat_mask |= 1u << at;
         }
         c->ipa_mode = mode;
         c->ipa_mul = (int)bits(w, 20, 8);
@@ -2854,7 +2867,13 @@ static ShaderInfo *glsl_finish(Ctx *c, bool any_branch, bool dbg) {
     } else if (stage == STAGE_FRAGMENT) {
         for (int i = 0; i < 32; i++) {
             if (!(c->in_attr_mask & (1u << i))) continue;
-            const char *interp = (c->flat_mask & (1u << i)) ? "flat " : (c->noperspective_mask & (1u << i)) ? "noperspective " : "";
+            // The SPH declares how the hardware interpolates generic input
+            // vectors. IPA mode 2 means a constant read, not a flat varying.
+            // Vulkan GLSL interpolation is per location, so follow the first
+            // used component as other Maxwell translators do.
+            unsigned type = nvn_pixel_imap_first_used(c->imap, (unsigned)i);
+            const char *interp = type == NVN_PIXEL_IMAP_CONSTANT ? "flat " :
+                                 type == NVN_PIXEL_IMAP_SCREEN_LINEAR ? "noperspective " : "";
             sp(&s, "layout(location = %d) %sin vec4 v%d;\n", i, interp, i);
         }
         for (int rt = 0; rt < 8; rt++) {
@@ -3091,6 +3110,10 @@ static ShaderInfo *translate(const uint8_t *blob, size_t max_size, int stage, co
     const uint8_t *sph = blob + 0x30;
     const uint8_t *code = code_start(blob, stage);
     if (stage == STAGE_FRAGMENT) {
+        // SPH type 2 (pixel shader): 32 ImapPixelVector bytes begin at
+        // 0x18, each encoding X/Y/Z/W interpolation in 2-bit fields.
+        // Source: NVIDIA Shader Program Header Specification, Table 20.
+        if (c->glsl) memcpy(c->imap, sph + 0x18, sizeof c->imap);
         c->omap_target = *(const uint32_t *)(sph + 0x48);
         c->omap_depth = (*(const uint32_t *)(sph + 0x4C) >> 1) & 1;
     }
@@ -3361,9 +3384,9 @@ void maxwell_disassemble(const uint8_t *code, size_t max_size, int stage, void *
 // (called under the runtime's translate lock, as the translator itself)
 bool maxwell_disk_cache;
 #ifdef SHADER_TRANSLATOR_ID
-static const char cache_build[] = SHADER_TRANSLATOR_ID;
+static const char cache_build[] = "pixel-imap-v1:" SHADER_TRANSLATOR_ID;
 #else
-static const char cache_build[] = __DATE__ " " __TIME__;
+static const char cache_build[] = "pixel-imap-v1:" __DATE__ " " __TIME__;
 #endif
 
 static uint64_t fnv(uint64_t h, const void *p, size_t n) {
