@@ -6532,14 +6532,20 @@ static void texture_info(int stage, ShaderInfo *si, int i, VkDescriptorImageInfo
             static int nomemo = -1;
             if (nomemo < 0) nomemo = ENV("LARECOMP_VK_NO_TEX_MEMO") != NULL;
             static struct { NvnTexture *tex; uint64_t vh, frame; uint32_t gen; uint8_t type, has_view; VkImageView view; } memo[1024];
+            // A whole-image copy may alias a depth/stencil texture to a different
+            // NvnTexture during the SAME rendering frame. Cache the resolved image,
+            // not just the pool slot's original texture, otherwise a memo hit can
+            // keep sampling the old image after an alias changes. Resolving first
+            // also applies alias_drop's vk_view_gen invalidation before lookup.
+            NvnTexture *sampled_tex = naliases ? alias_read(e->tex) : e->tex;
             uint64_t vh = e->has_view ? hash_words(0, &e->view, sizeof e->view) : 0, frame = vk_frame_counter();
-            uint32_t ms = (uint32_t)((((uintptr_t)e->tex >> 4) ^ vh ^ (uint64_t)st_->type * 0x9E3779B97F4A7C15ull) & 1023);
-            if (!nomemo && memo[ms].tex == e->tex && memo[ms].vh == vh && memo[ms].frame == frame && memo[ms].gen == vk_view_gen &&
+            uint32_t ms = (uint32_t)((((uintptr_t)sampled_tex >> 4) ^ vh ^ (uint64_t)st_->type * 0x9E3779B97F4A7C15ull) & 1023);
+            if (!nomemo && memo[ms].tex == sampled_tex && memo[ms].vh == vh && memo[ms].frame == frame && memo[ms].gen == vk_view_gen &&
                 memo[ms].type == st_->type && memo[ms].has_view == e->has_view) {
                 view = memo[ms].view;
             } else {
-                view = vk_view(naliases ? alias_read(e->tex) : e->tex, &e->view, e->has_view, false, st_->type);
-                memo[ms].tex = e->tex; memo[ms].vh = vh; memo[ms].frame = frame; memo[ms].gen = vk_view_gen;
+                view = vk_view(sampled_tex, &e->view, e->has_view, false, st_->type);
+                memo[ms].tex = sampled_tex; memo[ms].vh = vh; memo[ms].frame = frame; memo[ms].gen = vk_view_gen;
                 memo[ms].type = (uint8_t)st_->type; memo[ms].has_view = e->has_view; memo[ms].view = view;
             }
             renderer_texture_scale(e->tex, &sc[0], &sc[1]);
