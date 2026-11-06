@@ -18,6 +18,9 @@ static uint64_t t_ns = 1000000000ull, cpu_ns, gpu_total_ns;
 __thread uint64_t g_blocked_ns, g_rq_wait_ns, g_rq_lock_ns, g_submit_ns, g_gpu_wait_ns, g_present_ns, g_hooks_ns;
 volatile uint64_t g_vsync_count, g_vsync_ns;
 uint64_t pace_test_game_mgr;
+// Match the production game-identity flag, so pacing tests exercise the
+// Link's Awakening code path and catch accidental accesses from Violet.
+int g_game_is_la = 1;
 static uint8_t game_mgr[0x500];
 static uint64_t zone;
 static void vsyncs(void) { g_vsync_count = t_ns / VSYNC_NS, g_vsync_ns = g_vsync_count * VSYNC_NS; }
@@ -201,10 +204,26 @@ static int run(const Case *c) {
     return ok;
 }
 
+// Violet deliberately has no Link's Awakening game manager. A first present
+// must never read it, even while the pacer is off (the precise boot-time crash).
+// Use an intentionally invalid simulated pointer: without the identity guard
+// this test will fault at hold_30 instead of passing.
+static int violet_first_present(void) {
+    g_game_is_la = 0;
+    pace_test_game_mgr = 1;
+    pace_frame();  // first frame: the hold_30(false) branch previously dereferenced 0
+    t_ns += 16666667ull;
+    pace_frame();  // second frame: scene and busy-time logic must also be safe
+    int ok = !pace_is_slow();
+    printf("Violet first present with no Zelda game manager\n  %s\n", ok ? "ok" : "FAILED");
+    return ok;
+}
+
 int main(int argc, char **argv) {
     int ncases = (int)(sizeof cases / sizeof *cases);
-    if (argc < 2) { printf("%d\n", ncases); return 0; }  // (the runner: each case in its own process - pace.c's state)
+    if (argc < 2) { printf("%d\n", ncases + 1); return 0; }  // (each case in its own process)
     int i = atoi(argv[1]);
+    if (i == ncases) return violet_first_present() ? 0 : 1;
     if (i < 0 || i >= ncases) return 2;
     return run(&cases[i]) ? 0 : 1;
 }
