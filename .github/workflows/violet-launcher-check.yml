@@ -5,6 +5,8 @@ on:
     branches: [pokemon-za]
     paths:
       - "Play Violet.cmd"
+      - "tools/violet/startup_menu.ps1"
+      - "runtime/ui/launcher.mm"
       - "tools/violet/run.ps1"
       - "tools/violet/build.ps1"
       - "tools/violet/make_local.sh"
@@ -34,6 +36,23 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile(
             (Join-Path $PWD 'tools/violet/build.ps1'), [ref]$null, [ref]$errors) | Out-Null
           if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }
+      - name: Validate Windows startup menu and keybinding choices
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/startup_menu.ps1'), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+          $choices = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./tools/violet/startup_menu.ps1 -ListChoices
+          if (($choices -join ',') -ne 'play=0,controls=2,quit=3') {
+            throw "Startup chooser returned unexpected options: $($choices -join ',')"
+          }
+          $batch = Get-Content -LiteralPath './Play Violet.cmd' -Raw
+          $native = Get-Content -LiteralPath './runtime/ui/launcher.mm' -Raw
+          if ($batch -notmatch 'MENU_CHOICE' -or $batch -notmatch '\-OpenControls' -or
+              $batch -notmatch '\-Play' -or $native -notmatch 'VIOLET_LAUNCHER_OPEN_CONTROLS') {
+            throw 'Startup chooser is not connected to both native launch paths.'
+          }
       - name: Test launcher preflight with synthetic placeholder files
         shell: pwsh
         run: |
@@ -52,6 +71,10 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path 'build/msys-deps/ucrt64/bin' | Out-Null
           ./tools/violet/run.ps1 -CheckOnly
+          ./tools/violet/run.ps1 -OpenControls -CheckOnly
+          $conflictFailed = $false
+          try { ./tools/violet/run.ps1 -Play -OpenControls -CheckOnly } catch { $conflictFailed = $true }
+          if (-not $conflictFailed) { throw 'Launcher allowed contradictory Play and OpenControls switches.' }
           Remove-Item 'extracted/romfs.bin'
           $failed = $false
           try { ./tools/violet/run.ps1 -CheckOnly } catch { $failed = $true }
