@@ -2,8 +2,8 @@
 # A single run uses temporary environment variables, restored on exit.
 [CmdletBinding()]
 param(
-    [ValidateSet('Baseline', 'PackagedZero', 'ConservativeUploads', 'BC5Unsigned', 'Depth32', 'ShadowCompareOff')]
-    [string]$Mode = 'PackagedZero',
+    [ValidateSet('Baseline', 'PackagedZero', 'ConservativeUploads', 'BC5Unsigned', 'Depth32', 'ShadowCompareOff', 'ShaderQuadDerivatives', 'ShaderQuadControl')]
+    [string]$Mode = 'Baseline',
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
@@ -15,7 +15,9 @@ $vars = @(
     'LARECOMP_TEX_FULLHASH',
     'LARECOMP_BC5_UNORM',
     'LARECOMP_VK_D24',
-    'LARECOMP_NO_SHADOW'
+    'LARECOMP_NO_SHADOW',
+    'LARECOMP_SHADER_QUAD_DERIV',
+    'LARECOMP_SHADER_QUAD_CONTROL'
 )
 $old = @{}
 foreach ($name in $vars) { $old[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
@@ -52,6 +54,22 @@ switch ($Mode) {
         # depth bias, and comparison reference values. This is not a final fix.
         $chosen['LARECOMP_NO_SHADOW'] = '1'
     }
+    'ShaderQuadDerivatives' {
+        # NVIDIA normally uses subgroup quad swaps for the Switch game's
+        # SHFL -> FSWZADD derivatives. Pixel-sized stripes can result when a
+        # fragment's quad partners have diverged or are helper invocations.
+        # Force dFdxFine/dFdyFine recovery and disable quad control for this
+        # comparison. The translator caches this variant under a different key.
+        $chosen['LARECOMP_SHADER_QUAD_DERIV'] = '1'
+        $chosen['LARECOMP_SHADER_QUAD_CONTROL'] = '0'
+    }
+    'ShaderQuadControl' {
+        # If VK_KHR_shader_quad_control and maximal reconvergence are present,
+        # keep full 2x2 pixel quads participating in shader branches/loops.
+        # Hardware without those extensions safely ignores this request.
+        $chosen['LARECOMP_SHADER_QUAD_CONTROL'] = '1'
+        $chosen['LARECOMP_SHADER_QUAD_DERIV'] = '0'
+    }
 }
 try {
     foreach ($name in $vars) {
@@ -65,6 +83,9 @@ try {
     }
     if ($Mode -eq 'ShadowCompareOff') {
         Write-Warning 'Shadow depth comparisons are bypassed in this diagnostic; lighting may look too bright.'
+    }
+    if ($Mode -eq 'ShaderQuadDerivatives' -or $Mode -eq 'ShaderQuadControl') {
+        Write-Output 'Shader variant may compile new GLSL/SPIR-V pipelines. Normal graphics are restored on the next launch.'
     }
     if ($chosen.Count -eq 0) { Write-Output 'Overrides: none (normal texture paths)' }
     foreach ($name in @($chosen.Keys | Sort-Object)) { Write-Output ("Override: {0}={1}" -f $name, $chosen[$name]) }
