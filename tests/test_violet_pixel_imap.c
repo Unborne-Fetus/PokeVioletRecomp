@@ -19,15 +19,15 @@ int main(void) {
     assert(nvn_pixel_imap_needs_w(imap, 7, 1));
     assert(!nvn_pixel_imap_needs_w(imap, 7, 2));
     assert(!nvn_pixel_imap_needs_w(imap, 7, 3)); // unused inherits constant
-    imap[8] = 0b10101010; // 4 perspective components
+    imap[8] = 0xAA; // 4 perspective components
     assert(nvn_pixel_imap_first_used(imap, 8) == NVN_PIXEL_IMAP_PERSPECTIVE);
     for (unsigned i = 0; i < 4; i++)
         assert(nvn_pixel_imap_needs_w(imap, 8, i));
-    imap[9] = 0b11111111; // 4 screen-linear components
+    imap[9] = 0xFF; // 4 screen-linear components
     assert(nvn_pixel_imap_first_used(imap, 9) == NVN_PIXEL_IMAP_SCREEN_LINEAR);
     for (unsigned i = 0; i < 4; i++)
         assert(!nvn_pixel_imap_needs_w(imap, 9, i));
-    imap[10] = 0b01010101; // 4 flat components
+    imap[10] = 0x55; // 4 flat components
     assert(nvn_pixel_imap_first_used(imap, 10) == NVN_PIXEL_IMAP_CONSTANT);
     assert(!nvn_pixel_imap_needs_w(imap, 10, 0));
     assert(nvn_pixel_imap_needs_w(imap, 11, 1)); // empty header fallback
