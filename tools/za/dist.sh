@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 export PATH="/c/msys64/ucrt64/bin:/c/msys64/usr/bin:$PATH"
 GENOPT="-O1 -DGUEST_VOLATILE" GENARCH=-march=x86-64-v3  # (the game code's flags: part of the library id)
-B=build/za-dist D="build/dist-za/ZA Recomp"
+B=build/za-dist D="build/dist-za/Violet Recomp"
 
 # 1. the compiler (Windows' curl: MSYS2's one rejects TLS-inspecting proxies' certificates)
 ZIP_ZIG=build/zig-dl/zig-x86_64-windows-0.17.0.zip
@@ -97,6 +97,6 @@ done
 cp third_party/ffx_api/LICENSE.md "$D/AMD-FSR-LICENSE.md"
 du -sh "$D"
 if [ "${ZIP:-0}" = 1 ]; then
-    (cd build/dist-za && /c/Windows/System32/tar.exe -a -cf ZA-Recomp-windows.zip "ZA Recomp")
-    ls -la build/dist-za/ZA-Recomp-windows.zip
+    (cd build/dist-za && /c/Windows/System32/tar.exe -a -cf Violet-Recomp-windows.zip "Violet Recomp")
+    ls -la build/dist-za/Violet-Recomp-windows.zip
 fi
