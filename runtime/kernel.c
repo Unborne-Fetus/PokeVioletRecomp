@@ -998,14 +998,43 @@ static void svc_impl(Cpu *c, uint32_t imm, uint64_t pc) {
     }
     case 0x26:  // Break
         if (x[0] & 0x80000000u) { LOG("[kernel] Break notification %llx\n", x[0]); x[0] = R_OK; break; }
-        if (x[2] == 4 && x[1] >= GUEST_LO && x[1] < GUEST_HI) {  // an abort: info is the failed Result (module, description)
-            uint32_t rc = LD32(x[1]);  // (no info pointer: reading address 0 crashed here, hiding the abort's own report)
-            LOG("[kernel] abort on result 0x%x (%u-%u)\n", rc, 2000 + (rc & 0x1FF), (rc >> 9) & 0x1FFF);
+        if (x[2] == 4 && x[1] >= GUEST_LO && x[1] <= GUEST_HI - 4) {  // abort payload (a Result, not necessarily an error)
+            uint32_t rc = LD32(x[1]);
+            if (rc)
+                LOG("[kernel] abort on result 0x%x (%u-%u)\n", rc, 2000 + (rc & 0x1FF), (rc >> 9) & 0x1FFF);
+            else
+                LOG("[kernel] abort payload Result is zero (the failure condition is not identified)\n");
         }
-        {   // the guest's call chain (frame records: [fp] = caller's fp, [fp + 8] = return address)
+        // Crash-only context: Violet's startup abort can report Result 0, making its guest call site more useful than
+        // a guessed IPC error. Addresses are module-relative so they can be matched against the generated map.
+        LOG("[kernel] Break context pc=%llx lr=%llx sp=%llx fp=%llx x3=%llx x4=%llx x5=%llx\n",
+            (unsigned long long)pc, (unsigned long long)c->x[30], (unsigned long long)c->sp,
+            (unsigned long long)c->x[29], (unsigned long long)c->x[3], (unsigned long long)c->x[4],
+            (unsigned long long)c->x[5]);
+        for (int i = 0; i < g_nmodules; i++)
+            if (pc >= g_modules[i].base && pc < g_modules[i].base + g_modules[i].size) {
+                LOG("[kernel] Break module %s+0x%llx\n", g_modules[i].name,
+                    (unsigned long long)(pc - g_modules[i].base));
+                break;
+            }
+        {   // guest frame records: [fp] = caller fp, [fp + 8] = return address
             uint64_t fp = c->x[29];
-            for (int i = 0; i < 16 && fp >= GUEST_LO && fp < GUEST_HI && !(fp & 7); i++, fp = LD64(fp))
-                LOG("  guest #%d %llx\n", i, (unsigned long long)LD64(fp + 8));
+            for (int i = 0; i < 16 && fp >= GUEST_LO && fp <= GUEST_HI - 16 && !(fp & 7); i++) {
+                uint64_t ret = LD64(fp + 8), next = LD64(fp);
+                const char *module = NULL;
+                uint64_t off = 0;
+                for (int j = 0; j < g_nmodules; j++)
+                    if (ret >= g_modules[j].base && ret < g_modules[j].base + g_modules[j].size) {
+                        module = g_modules[j].name;
+                        off = ret - g_modules[j].base;
+                        break;
+                    }
+                if (module) LOG("  guest #%d %llx (%s+0x%llx)\n", i, (unsigned long long)ret, module,
+                                (unsigned long long)off);
+                else LOG("  guest #%d %llx (unmapped)\n", i, (unsigned long long)ret);
+                if (next <= fp) break;  // corrupt/cyclic frame chain: do not loop or read arbitrary memory
+                fp = next;
+            }
         }
         FATAL("svcBreak(reason=%llx, info=%llx, size=%llx) at %llx\n", x[0], x[1], x[2], pc);
     case 0x27: debug_string(x[0], x[1]); x[0] = R_OK; break;
