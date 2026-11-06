@@ -1,0 +1,65 @@
+name: Publish Violet source alpha
+on:
+  push:
+    branches: [pokemon-za]
+    paths:
+      - '.github/workflows/publish-violet-alpha.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-violet-v0.1.0-alpha.1
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/pokemon-za'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out exact source revision
+        uses: actions/checkout@v4
+
+      - name: Publish source-only prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: v0.1.0-alpha.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; nothing to publish."
+            exit 0
+          fi
+
+          cat > "$RUNNER_TEMP/violet-release-notes.md" <<'NOTES'
+          # Pokémon Violet Recomp — experimental alpha source preview
+
+          This is a **development prerelease**, **not a verified playable game**. The repository is an experimental native/static recompilation project built from ZA Recomp and LAS Recomp.
+
+          ### Current work
+          - Violet-targeted import and executable-version handling.
+          - Windows launcher with Play, Change keybinds, and Quit choices.
+          - Native runtime and graphics debugging, including opt-in graphics A/B diagnostics.
+          - Automated Windows launcher and regression checks.
+
+          ### Download contents
+          GitHub's automatically generated **Source code (zip)** and **Source code (tar.gz)** archives only.
+
+          **No Windows executable or ready-to-run game is included.** This release does **not** contain Nintendo game files, copyrighted game assets, keys, DLC or generated game code. Users must provide their own legitimately obtained game data for local development and testing.
+
+          ### Known limitations
+          In-game visuals, runtime compatibility, game boot reliability and performance are still being worked on. The passing CI checks do not establish that gameplay is functional.
+
+          See the repository [README](https://github.com/Unborne-Fetus/PokeVioletRecomp#readme), [porting notes](https://github.com/Unborne-Fetus/PokeVioletRecomp/blob/pokemon-za/docs/VIOLET-PORT.md), and [licenses](https://github.com/Unborne-Fetus/PokeVioletRecomp/blob/pokemon-za/LICENSE).
+
+          Credits: ZA Recomp, LAS Recomp and their respective contributors.
+          NOTES
+
+          gh release create "$TAG" \
+            --target "$GITHUB_SHA" \
+            --title "Pokémon Violet Recomp v0.1.0-alpha.1 — Source Preview" \
+            --notes-file "$RUNNER_TEMP/violet-release-notes.md" \
+            --prerelease
