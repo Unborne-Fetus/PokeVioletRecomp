@@ -13,14 +13,32 @@ if defined CONFLICT goto :conflicted
 set "BRANCH="
 for /f "delims=" %%B in ('git branch --show-current 2^>nul') do set "BRANCH=%%B"
 if /I not "%BRANCH%"=="pokemon-za" goto :wrong_branch
-echo Checking and rebuilding changed native runtime files before launching...
+if not exist "tools\violet\startup_menu.ps1" goto :old_checkout
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File "%~dp0tools\violet\startup_menu.ps1"
+set "MENU_CHOICE=%ERRORLEVEL%"
+if "%MENU_CHOICE%"=="0" goto :launch_play
+if "%MENU_CHOICE%"=="2" goto :launch_controls
+if "%MENU_CHOICE%"=="3" goto :cancelled
+echo Startup menu could not open. Exit code: %MENU_CHOICE%
+goto :failure
+:launch_play
+echo Checking native runtime before launching Violet...
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\violet\run.ps1" -Play -RebuildRuntime -CaptureCrash
+goto :launched
+:launch_controls
+echo Opening the native Controls editor. Choose Configure inputs to rebind, then return to Play.
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\violet\run.ps1" -OpenControls -RebuildRuntime -CaptureCrash
+goto :launched
+:launched
 set "EXIT=%ERRORLEVEL%"
 if not "%EXIT%"=="0" goto :failure
 popd
 exit /b 0
+:cancelled
+popd
+exit /b 0
 :old_checkout
-echo This is an old checkout without Violet's development scripts.
+echo This checkout does not include the latest Violet startup and development scripts.
 echo Switch to the latest pokemon-za checkout; do not run an older Violet executable.
 goto :failure
 :conflicted
