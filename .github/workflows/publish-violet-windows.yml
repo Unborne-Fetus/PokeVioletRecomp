@@ -58,7 +58,7 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$asset" --clobber
           else
-            gh release create "$TAG" "$asset" --target d3b7608b1705ac5eaeb870185e000848fb4669ef \
+            gh release create "$TAG" "$asset" --target pokemon-za \
               --title "Pokémon Violet Recomp v0.1.0-alpha.2 — Windows Native Preview" \
               --notes-file "$RUNNER_TEMP/violet-windows-notes.md" --prerelease
           fi
