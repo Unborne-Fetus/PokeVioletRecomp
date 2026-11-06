@@ -33,6 +33,17 @@ static void btm_user_core(Service *s, IpcReq *req, IpcResp *resp) {
     int event = -1;
     switch (req->cmd) {
     case 0: event = 0; break;   // AcquireBleScanEvent
+    case 1: {  // GetBleScanFilterParameter(u16): the Switch's built-in Nintendo scan filter, not a device result.
+        uint16_t id = IN(uint16_t, 0);
+        if (id != 1 && id != 0xFFFF) { resp->result = 0xF601; break; }
+        // BleAdvertisePacketParameter: Nintendo company ID (0x0553), followed by the six-byte filter.
+        static const uint8_t general[6] = {0x00, 0x01, 0x00, 0x00, 0x01, 0x00};
+        static const uint8_t special[6] = {0xAD, 0xDE, 0x00, 0xEF, 0xBE, 0x00};
+        OUT(uint16_t, 0) = 0x0553;
+        memcpy(resp->data + 2, id == 1 ? general : special, 6);
+        resp_size(resp, 8);
+        break;
+    }
     case 17: event = 1; break;  // AcquireBleConnectionEvent
     case 21: event = 2; break;  // AcquireBlePairingEvent
     case 26: event = 3; break;  // AcquireBleServiceDiscoveryEvent
