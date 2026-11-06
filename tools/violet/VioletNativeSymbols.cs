@@ -46,9 +46,12 @@ public static class VioletNativeSymbols
     {
         if (!File.Exists(imagePath)) throw new FileNotFoundException("Native executable not found", imagePath);
         string folder = Path.GetDirectoryName(Path.GetFullPath(imagePath));
+        // This build's lld linker normally places lasrecomp.pdb under build/violet-gnu/link/,
+        // not alongside the final lasrecomp.exe. Search both, without moving or modifying PDBs.
+        string symbolPath = folder + ";" + Path.Combine(folder, "link");
         IntPtr proc = Process.GetCurrentProcess().Handle;
         SymSetOptions(0x2 | 0x4 | 0x10 | 0x200); // UNDNAME, DEFERRED_LOADS, LOAD_LINES, FAIL_CRITICAL_ERRORS
-        if (!SymInitialize(proc, folder, false))
+        if (!SymInitialize(proc, symbolPath, false))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "DbgHelp could not initialize");
         const ulong imageBase = 0x180000000UL;
         var output = new List<string>();
