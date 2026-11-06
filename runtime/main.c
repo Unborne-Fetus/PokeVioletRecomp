@@ -92,8 +92,19 @@ static void module_init(Cpu *c, Module *m) {
     else run_array(c, m->init_array, m->init_array_sz);
 }
 
-static void rtld_init_sdk(Cpu *c) { module_init(c, &g_modules[1]); }
-static void rtld_init_main(Cpu *c) { module_init(c, &g_modules[0]); }
+static Module *module_named(const char *name) {
+    for (int i = 0; i < g_nmodules; i++)
+        if (!strcmp(g_modules[i].name, name)) return &g_modules[i];
+    FATAL("missing game module %s\n", name);
+    return NULL;
+}
+static void rtld_init_sdk(Cpu *c) { module_init(c, module_named("sdk")); }
+static void rtld_init_main(Cpu *c) {
+    // Before main's constructors, initialize extra libraries imported by the game.
+    for (int i = 0; i < g_nmodules; i++)
+        if (!strncmp(g_modules[i].name, "subsdk", 6)) module_init(c, &g_modules[i]);
+    module_init(c, module_named("main"));
+}
 static void rtld_fini(Cpu *c) { (void)c; LOG("nnMain returned\n"); }
 
 // Claim the guest address range before anything else can map there. The host allocator places
