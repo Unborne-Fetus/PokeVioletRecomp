@@ -44,12 +44,55 @@ try {
     $dest = Join-Path $build "violet-probe-$stamp"
     New-Item -ItemType Directory -Path $dest -Force | Out-Null
     $images = @($group.Group | Sort-Object Name | Select-Object -First 80)
-    foreach ($f in $images) { Copy-Item -LiteralPath $f.FullName -Destination (Join-Path $dest $f.Name) }
+    # The native F9 probe hashes a 64x64 pixel region, but its PNG writer dumps
+    # the entire render target. Crop around the watched pixel to keep the ZIP
+    # practical and retain exact pixels; also keep a vertically reflected crop
+    # because some render targets use a lower-left origin.
+    Add-Type -AssemblyName System.Drawing
+    $saved = 0
+    foreach ($f in $images) {
+        $source = [System.Drawing.Image]::FromFile($f.FullName)
+        try {
+            $cropW = [Math]::Min(64, $source.Width)
+            $cropH = [Math]::Min(64, $source.Height)
+            $cx = [int][Math]::Floor($source.Width * $X / 1000)
+            $cy = [int][Math]::Floor($source.Height * $Y / 1000)
+            $left = [Math]::Max(0, [Math]::Min($source.Width - $cropW, $cx - [int]($cropW / 2)))
+            $top = [Math]::Max(0, [Math]::Min($source.Height - $cropH, $cy - [int]($cropH / 2)))
+            $otherTop = [Math]::Max(0, [Math]::Min($source.Height - $cropH,
+                $source.Height - $cy - [int]($cropH / 2)))
+            $bmp = [System.Drawing.Bitmap]::new(2 * $cropW, $cropH)
+            $graphics = [System.Drawing.Graphics]::FromImage($bmp)
+            try {
+                $graphics.Clear([System.Drawing.Color]::Black)
+                $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::NearestNeighbor
+                $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::Half
+                $graphics.DrawImage($source,
+                    [System.Drawing.Rectangle]::new(0, 0, $cropW, $cropH),
+                    [System.Drawing.Rectangle]::new($left, $top, $cropW, $cropH),
+                    [System.Drawing.GraphicsUnit]::Pixel)
+                $graphics.DrawImage($source,
+                    [System.Drawing.Rectangle]::new($cropW, 0, $cropW, $cropH),
+                    [System.Drawing.Rectangle]::new($left, $otherTop, $cropW, $cropH),
+                    [System.Drawing.GraphicsUnit]::Pixel)
+                $bmp.Save((Join-Path $dest $f.Name), [System.Drawing.Imaging.ImageFormat]::Png)
+                $saved++
+            } finally {
+                $graphics.Dispose()
+                $bmp.Dispose()
+            }
+        } finally {
+            $source.Dispose()
+        }
+    }
     @(
         "F9 per-draw probe frame: $($group.Name)"
         "Normalized location: $probe"
-        "Images: $($images.Count)"
-        'Each PNG is a 64x64 region after a draw; the stderr [probe] line names its vertex and fragment shaders.'
+        "Images: $saved"
+        'The probe tests a 64x64 region for changes, then saves its full-color render target.'
+        'Each PNG here contains two crops of that target: direct Y at left, vertically flipped Y at right.'
+        'The original full-frame PNGs remain in build/ and are NOT overwritten.'
+        'The stderr [probe] line names the vertex and fragment shaders for each draw.'
         'Compare consecutive images to locate the first draw that adds stripes.'
         'Do not upload this ZIP or game data to a public GitHub repository.'
     ) | Set-Content -LiteralPath (Join-Path $dest 'readme.txt') -Encoding UTF8
@@ -66,7 +109,7 @@ try {
     $zip = "$dest.zip"
     Compress-Archive -Path (Join-Path $dest '*') -DestinationPath $zip -CompressionLevel Optimal
     Write-Output "F9 per-draw probe report: $zip"
-    Write-Output "Captured $($images.Count) changes to 64x64 scene pixels on frame $($group.Name)."
+    Write-Output "Captured $saved cropped images from the changed 3D pixel region on frame $($group.Name)."
     if ($runtimeError) { throw $runtimeError }
 } finally {
     [Environment]::SetEnvironmentVariable('LARECOMP_PROBE', $previousProbe, 'Process')
