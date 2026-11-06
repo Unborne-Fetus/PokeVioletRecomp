@@ -15,7 +15,7 @@ set "PATH=%CD%\build\msys-deps\ucrt64\bin;%PATH%"
 echo Starting Pokemon Violet from the existing native build...
 echo Game data: "%CD%\extracted"
 "build\violet-gnu\lasrecomp.exe" "%CD%\extracted" --play
-if errorlevel 1 goto :game_error
+if not "%ERRORLEVEL%"=="0" goto :game_error
 popd
 exit /b 0
 
