@@ -260,6 +260,12 @@ static void application_functions(Service *s, IpcReq *req, IpcResp *resp) {
         resp_size(resp, 8);
         break;
     }
+    case 22: {  // SetTerminateResult(Result): the game's final reported Result, often just before svcBreak.
+        uint32_t result = IN(uint32_t, 0);
+        LOG("[am] SetTerminateResult 0x%x (%u-%u)\n",
+            result, 2000 + (result & 0x1FF), (result >> 9) & 0x1FFF);
+        break;
+    }
     case 23: memcpy(resp->data, "1.0.0", 6); resp_size(resp, 0x10); break;
     case 40: OUT(uint8_t, 0) = 0; resp_size(resp, 1); break;  // NotifyRunning
     case 130: case 140: resp->copy_handles[resp->ncopy++] = new_event(); break;
