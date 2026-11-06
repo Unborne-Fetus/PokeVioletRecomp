@@ -59,6 +59,8 @@ This writes to `build/violet-inspect/` and is not a playable game installation. 
 
 The inherited runtime build instructions are in [docs/BUILD-windows.md](docs/BUILD-windows.md). The full SDL3/FFmpeg/Vulkan/shaderc runtime toolchain is separate from the importer and Python generator. Upstream release scripts under `tools/za/` still contain Z-A-specific packaging and are not a Violet release workflow.
 
+**Launching Violet on Windows:** once your private game files and native game DLL have been prepared, double-click **`Play Violet.cmd`** in the repository folder, or run `.\tools\violet\run.ps1 -Play` in PowerShell. Both methods pass the absolute `extracted` path to the runtime, so switching to the user-data directory will not hide the game files. To check for missing files without launching anything, use `.\tools\violet\run.ps1 -CheckOnly`. If the guest aborts, run `.\tools\violet\test_boot.ps1` to capture a separate diagnostic log and JSON report. The launcher is runnable; **a working in-game boot has not yet been verified**.
+
 This checkout also has a prepared private toolchain under `build/zig` and `build/msys-deps/ucrt64`. Rebuild it and open the development launcher with:
 
 ```powershell
