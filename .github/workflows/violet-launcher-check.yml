@@ -8,6 +8,7 @@ on:
       - "tools/violet/startup_menu.ps1"
       - "tools/violet/graphics_triage.ps1"
       - "tools/violet/graphics_capture_report.ps1"
+      - "tools/violet/graphics_capture_launch.ps1"
       - "runtime/nvn/objects.c"
       - "runtime/ui/launcher.mm"
       - "tools/violet/run.ps1"
@@ -73,6 +74,16 @@ jobs:
               throw "A/B test contaminated the runner environment with $name."
             }
           }
+      - name: Check frame-accurate F9 capture launcher in dry-run mode
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/graphics_capture_launch.ps1'), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+          $capture = ./tools/violet/graphics_capture_launch.ps1 -Frames 3 -DryRun | Out-String
+          if ($capture -notmatch '3 consecutive rendering frames') { throw 'F9 capture launcher did not select three frames.' }
+          if ($env:LARECOMP_DEBUG_FRAMES) { throw 'F9 capture launcher leaked an environment variable.' }
       - name: Test F9 render-pass contact-sheet archive with synthetic images
         shell: pwsh
         run: |
