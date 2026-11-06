@@ -48,12 +48,14 @@ jobs:
           $baseline = ./tools/violet/graphics_triage.ps1 -Mode Baseline -DryRun | Out-String
           $zero = ./tools/violet/graphics_triage.ps1 -Mode PackagedZero -DryRun | Out-String
           $safe = ./tools/violet/graphics_triage.ps1 -Mode ConservativeUploads -DryRun 3>&1 | Out-String
+          $shadows = ./tools/violet/graphics_triage.ps1 -Mode ShadowCompareOff -DryRun 3>&1 | Out-String
           if ($baseline -notmatch 'Overrides: none' -or
               $zero -notmatch 'LARECOMP_PACKAGED_ZERO_BH=1' -or
-              $safe -notmatch 'LARECOMP_TEX_UNPACK_THREADS=0') {
+              $safe -notmatch 'LARECOMP_TEX_UNPACK_THREADS=0' -or
+              $shadows -notmatch 'LARECOMP_NO_SHADOW=1') {
             throw 'A/B test toggles did not select the expected graphics paths.'
           }
-          if ($env:LARECOMP_PACKAGED_ZERO_BH -or $env:LARECOMP_TEX_UNPACK_THREADS) {
+          if ($env:LARECOMP_PACKAGED_ZERO_BH -or $env:LARECOMP_TEX_UNPACK_THREADS -or $env:LARECOMP_NO_SHADOW) {
             throw 'A/B test contaminated the runner environment.'
           }
       - name: Validate Windows startup menu and keybinding choices
