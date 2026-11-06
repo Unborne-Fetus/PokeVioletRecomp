@@ -1,0 +1,143 @@
+name: Windows Violet Recomp executable (experimental)
+on:
+  push:
+    branches: [pokemon-za]
+    paths:
+      - '.github/workflows/windows-violet-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-violet-alpha2
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 120
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install .NET 8 for on-device importer
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Python 3.12 for standalone game-code generator
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up MSYS2 UCRT64 native compiler and libraries
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            make
+            zip
+            unzip
+            diffutils
+            mingw-w64-ucrt-x86_64-clang
+            mingw-w64-ucrt-x86_64-lld
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-binutils
+            mingw-w64-ucrt-x86_64-sdl3
+            mingw-w64-ucrt-x86_64-ffmpeg
+            mingw-w64-ucrt-x86_64-vulkan-devel
+            mingw-w64-ucrt-x86_64-shaderc
+            mingw-w64-ucrt-x86_64-spirv-tools
+            mingw-w64-ucrt-x86_64-vulkan-memory-allocator
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-nasm
+
+      - name: Build LGPL-only multimedia libraries
+        shell: msys2 {0}
+        run: |
+          set -e
+          bash tools/build_deps_windows.sh
+          test -f build/deps-win/lib/libavcodec.dll.a
+
+      - name: Build native Violet launcher (no Nintendo game code)
+        shell: msys2 {0}
+        run: |
+          set -e
+          make -j4 B=build/win-release DEPS=build/deps-win RELEASE=1 build/win-release/lasrecomp.exe
+          test -s build/win-release/lasrecomp.exe
+          test -s build/win-release/lasrecomp.dll.a
+
+      - name: Build local-game importer
+        shell: pwsh
+        run: |
+          dotnet publish tools/zaimport/zaimport.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -o build/zaimport
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path build/zaimport/zaimport.exe)) { throw 'Importer build failed' }
+
+      - name: Freeze generator so players do not need Python
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check pyinstaller==6.22.3 capstone==5.0.9 unicorn==2.1.4 lz4==4.4.5
+          if ($LASTEXITCODE -ne 0) { throw 'Generator dependencies failed' }
+          python -m PyInstaller --noconfirm --clean --distpath build/helper --workpath build/pyinstaller tools/lasgen.spec
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path build/helper/lasgen/lasgen.exe)) { throw 'Generator build failed' }
+
+      - name: Build portable Zig game-code compiler
+        shell: msys2 {0}
+        run: |
+          set -e
+          bash tools/fetch_zig.sh
+          bash tools/zig_slim.sh -O1 -DGUEST_VOLATILE -fno-strict-aliasing -Wno-return-type -Wno-unused-label -fvisibility=hidden -D_FILE_OFFSET_BITS=64 -mcpu=x86_64_v3
+          test -s build/zig-slim/zig.exe
+
+      - name: Package Windows executable and verify contents
+        shell: msys2 {0}
+        run: |
+          set -e
+          bash -n tools/violet/package_windows.sh
+          bash tools/violet/package_windows.sh v0.1.0-alpha.2
+
+      - name: Store downloadable ZIP in Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: PokeVioletRecomp-v0.1.0-alpha.2-Windows-x64
+          path: build/dist/PokeVioletRecomp-v0.1.0-alpha.2-Windows-x64.zip
+          if-no-files-found: error
+
+      - name: Publish successful Windows build as GitHub prerelease
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $tag = "v0.1.0-alpha.2"
+          $asset = "build/dist/PokeVioletRecomp-$tag-Windows-x64.zip"
+          if (!(Test-Path -LiteralPath $asset)) { throw 'Built archive is missing' }
+          $notes = @'
+          # Pokémon Violet Recomp — Windows native executable (experimental)
+
+          **Experimental developer alpha, not verified playable.** This ZIP contains the real Violet Recomp Windows runtime and local setup tools. The first launch can import and compile each user's own game data.
+
+          ### Install
+          1. Download the Windows-x64 ZIP and extract the full Violet Recomp folder.
+          2. Double-click PokeVioletRecomp.exe.
+          3. Select your own legitimately obtained game files and keys in the built-in first-run screen.
+          4. Allow time and free disk space for import, translation and native compilation.
+
+          The download includes NO Nintendo game packages, private keys, generated guest code or save files. A Vulkan-capable Windows PC is required.
+
+          ### Limitations
+          Game boot, graphics, FPS and stability are still in development. Successful CI compilation is not proof of working gameplay. Please report crashes with launcher logs. Alpha updates must be downloaded from GitHub manually.
+
+          Source and licenses: https://github.com/Unborne-Fetus/PokeVioletRecomp
+          '@
+          Set-Content -LiteralPath "$env:RUNNER_TEMP/release-notes.md" -Value $notes -Encoding UTF8
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Output "Updating asset on existing $tag prerelease"
+            gh release upload $tag $asset --clobber
+          } else {
+            gh release create $tag $asset --target "${{ github.sha }}" --title "Pokémon Violet Recomp v0.1.0-alpha.2 — Windows Native Preview" --notes-file "$env:RUNNER_TEMP/release-notes.md" --prerelease
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release publication failed' }
