@@ -1,0 +1,50 @@
+name: Violet launcher checks
+
+on:
+  push:
+    branches: [pokemon-za]
+    paths:
+      - "Play Violet.cmd"
+      - "tools/violet/run.ps1"
+      - "tools/violet/boot_triage.py"
+      - "tests/test_violet_boot_triage.py"
+      - ".github/workflows/violet-launcher-check.yml"
+  workflow_dispatch:
+
+jobs:
+  launcher:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse runner with PowerShell
+        shell: pwsh
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/run.ps1'), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }
+      - name: Test launcher preflight with synthetic placeholder files
+        shell: pwsh
+        run: |
+          $paths = @(
+            'build/violet-gnu/lasrecomp.exe',
+            'build/violet-gnu/lasgame.dll',
+            'extracted/exefs/main',
+            'extracted/exefs/subsdk0',
+            'extracted/exefs/sdk',
+            'extracted/exefs/main.npdm',
+            'extracted/romfs.bin'
+          )
+          foreach ($p in $paths) {
+            New-Item -ItemType Directory -Force -Path (Split-Path -Parent $p) | Out-Null
+            New-Item -ItemType File -Force -Path $p | Out-Null
+          }
+          New-Item -ItemType Directory -Force -Path 'build/msys-deps/ucrt64/bin' | Out-Null
+          ./tools/violet/run.ps1 -CheckOnly
+          Remove-Item 'extracted/romfs.bin'
+          $failed = $false
+          try { ./tools/violet/run.ps1 -CheckOnly } catch { $failed = $true }
+          if (-not $failed) { throw 'CheckOnly failed to detect a missing RomFS.' }
+      - name: Test boot log analyzer
+        shell: pwsh
+        run: python -m unittest discover -s tests -p test_violet_boot_triage.py -v
