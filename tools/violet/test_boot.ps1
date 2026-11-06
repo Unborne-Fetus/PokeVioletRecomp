@@ -42,7 +42,18 @@ try {
     $timedOut = -not $process.WaitForExit($Seconds * 1000)
     if ($timedOut) { $process.Kill(); $process.WaitForExit() }
     Write-Output ("Test {0}: exit {1}, reached time limit {2}; data {3}" -f $Name, $process.ExitCode, $timedOut, $data)
-    Get-Content -LiteralPath (Join-Path $data 'stderr.log') -Tail 35
+    $stderrPath = Join-Path $data 'stderr.log'
+    Get-Content -LiteralPath $stderrPath -Tail 35
+    # Always analyse the scratch run, including when the game aborts or hits the time limit.
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if ($python) {
+        $reportPath = Join-Path $data 'boot-summary.json'
+        $triage = @((Join-Path $PSScriptRoot 'boot_triage.py'), $stderrPath, '--json', $reportPath)
+        if ($timedOut) { $triage += '--timed-out' }
+        & $python.Source @triage
+    } else {
+        Write-Warning "Python unavailable: raw stderr.log is retained; boot_triage.py can be run later."
+    }
 } finally {
     foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key], 'Process') }
 }
