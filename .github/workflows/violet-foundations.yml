@@ -28,6 +28,10 @@ jobs:
           clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn -Iruntime/hle runtime/gamebuild.c
           clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn tools/gamelib_entry.c
           clang -std=gnu11 -D_GNU_SOURCE -DRECOMP_HAS_SUBSDK0=1 -fsyntax-only -Iruntime -Iruntime/nvn tools/gamelib_entry.c
+      - name: Test Violet NPDM detection with synthetic fixtures
+        run: |
+          clang -std=gnu11 -Iruntime tests/test_violet_game_identity.c -o /tmp/violet-game-identity
+          /tmp/violet-game-identity
       - name: Link and exercise optional third-module game-library ABI
         run: |
           clang -std=gnu11 -Iruntime tools/gamelib_entry.c tests/test_violet_gamelib.c -o /tmp/recomp-abi-two
