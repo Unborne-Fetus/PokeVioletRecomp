@@ -81,12 +81,13 @@ static uint64_t stat_pace_over;
 static bool hold_30(bool on) {
     static bool held;
     static uint8_t saved;
-#ifndef PACE_TEST
     // Violet and other non-LA games deliberately use an all-zero GameAddrs table.
     // Disabling the pace hold in pace_frame() is not sufficient: the first-frame
     // and hitch paths still called hold_30(false), which dereferenced GA(GAME_MGR)
     // at address zero before any image could be presented.
-    if (!g_game_is_la || !GA(GAME_MGR)) return held = false;
+    if (!g_game_is_la) return held = false;
+#ifndef PACE_TEST
+    if (!GA(GAME_MGR)) return held = false;
 #endif
 #ifdef PACE_TEST  // (tools/test_pace.c: a simulated game manager)
     extern uint64_t pace_test_game_mgr;
@@ -186,12 +187,10 @@ static void spike_test(void) {
 // The scene a frame shows, for the way back to 60 (see above): 0 when it isn't gameplay (no save in play, or no world on
 // screen: the pause menu, title, file select), else the level and camera zone, hashed.
 static uint64_t pace_scene(void) {
-#ifndef PACE_TEST
     // Link's Awakening scene and camera addresses do not exist in Violet.
     // The pace statistics can still run, but scene-based hold logic must not
     // interpret Violet memory as Link's Awakening state.
     if (!g_game_is_la) return 0;
-#endif
     extern int game_in_play(void);              // hle/warp.c
     extern bool world_on_screen(void);          // hle/mirror.c
     extern const char *game_level_name(void);   // hle/widescreen.c
