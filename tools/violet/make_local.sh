@@ -16,9 +16,9 @@ if [[ ! $jobs =~ ^[0-9]+$ ]] || ((jobs < 1 || jobs > 32)); then
 fi
 
 # Force the make binary belonging to the same MSYS2 installation as bash.
-make_bin=/usr/bin/make.exe
+make_bin=${VIOLET_MAKE_BIN:-/usr/bin/make.exe}
 if [[ ! -x $make_bin ]]; then
-    echo "MSYS2 make is missing from /usr/bin/make.exe" >&2
+    echo "Make is missing or not executable: $make_bin" >&2
     exit 2
 fi
 
