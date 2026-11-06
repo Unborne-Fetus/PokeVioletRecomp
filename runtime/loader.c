@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "rt.h"
+#include "game_identity.h"
 
 Module g_modules[4];
 int g_nmodules;
@@ -190,13 +191,26 @@ static void relocate(Module *m) {
 }
 
 void loader_load(const char *exefs) {
+    // The loader also runs after an in-process game reboot. Reusing the old
+    // module count would append duplicate entries and overrun g_modules[4].
+    g_nmodules = 0;
+    memset(g_modules, 0, sizeof g_modules);
     char path[1024];
-    static const struct { const char *name; uint64_t base; } mods[] = {{"main", MAIN_BASE}, {"sdk", SDK_BASE}};
-    for (unsigned i = 0; i < 2; i++) {
+    bool violet = rt_is_violet_exefs(exefs);
+    static const struct { const char *name; uint64_t base; } ordinary[] = {
+        {"main", MAIN_BASE}, {"sdk", SDK_BASE},
+    };
+    static const struct { const char *name; uint64_t base; } violet_modules[] = {
+        {"main", MAIN_BASE}, {"subsdk0", SUBSDK0_BASE}, {"sdk", SDK_BASE},
+    };
+    size_t count = violet ? 3 : 2;
+    for (size_t i = 0; i < count; i++) {
         Module *m = &g_modules[g_nmodules++];
-        m->name = mods[i].name;
+        m->name = violet ? violet_modules[i].name : ordinary[i].name;
+        uint64_t base = violet ? violet_modules[i].base : ordinary[i].base;
         snprintf(path, sizeof path, "%s/%s", exefs, m->name);
-        load_nso(m, path, mods[i].base);
+        load_nso(m, path, base);
+        if (m->size > 0x40000000ull) FATAL("%s module exceeds its address slot\n", m->name);
     }
     for (int i = 0; i < g_nmodules; i++) relocate(&g_modules[i]);
 }

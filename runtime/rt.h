@@ -35,6 +35,7 @@ static inline void __attribute__((format(printf, 1, 2))) rt_log(const char *fmt,
 #define GUEST_HI     0x7800000000ull
 #endif
 #define MAIN_BASE    0x7000000000ull
+#define SUBSDK0_BASE 0x7004000000ull   // independent 1 GiB module slot
 #define SDK_BASE     0x7008000000ull   // (128 MB for main: Pokémon Legends Z-A's image is 0x5f7a000)
 #define HLE_BASE     0x7080000000ull   // fake addresses for host-implemented functions
 #define HLE_SIZE     0x0000100000ull

@@ -27,7 +27,7 @@
 #ifndef GAMELIB_ID
 #define GAMELIB_ID "dev"
 #endif
-#define GAMELIB_ABI 1
+#define GAMELIB_ABI 2
 #define GAMELIB_FULL_ID_SIZE 96
 
 bool gamelib_old_cpu(void);  // runtime/gamelib.c: no AVX2 / FMA / BMI2 - the game code is built for x86-64-v2
@@ -53,6 +53,9 @@ typedef struct {
     const uint64_t *main_addrs, *sdk_addrs;  // sorted guest addresses
     const GuestFn *main_fns, *sdk_fns;       // the functions at them
     const uint64_t *main_count, *sdk_count;
+    const uint64_t *subsdk0_addrs;  // optional third NSO module (Violet)
+    const GuestFn *subsdk0_fns;
+    const uint64_t *subsdk0_count;
 } GameLibTables;
 
 // The library's one exported function (tools/gamelib_entry.c).

@@ -1,0 +1,49 @@
+name: Violet recomp foundations
+on:
+  push:
+    branches: [violet-port]
+  pull_request:
+    branches: [pokemon-za]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate Python sources
+        run: python -m compileall -q tools/violet tools/gen.py tests/test_violet_check_dump.py
+      - name: Run dump preflight tests (synthetic modules only)
+        run: python -m unittest discover -s tests -p 'test_violet_*.py' -v
+      - name: Syntax check modified C core
+        run: |
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn -Iruntime/hle runtime/loader.c
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn -Iruntime/hle runtime/dispatch.c
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn -Iruntime/hle runtime/gamebuild.c
+          clang -std=gnu11 -D_GNU_SOURCE -fsyntax-only -Iruntime -Iruntime/nvn tools/gamelib_entry.c
+          clang -std=gnu11 -D_GNU_SOURCE -DRECOMP_HAS_SUBSDK0=1 -fsyntax-only -Iruntime -Iruntime/nvn tools/gamelib_entry.c
+      - name: Test Violet NPDM detection with synthetic fixtures
+        run: |
+          clang -std=gnu11 -Iruntime tests/test_violet_game_identity.c -o /tmp/violet-game-identity
+          /tmp/violet-game-identity
+      - name: Link and exercise optional third-module game-library ABI
+        run: |
+          clang -std=gnu11 -Iruntime tools/gamelib_entry.c tests/test_violet_gamelib.c -o /tmp/recomp-abi-two
+          /tmp/recomp-abi-two
+          clang -std=gnu11 -DRECOMP_HAS_SUBSDK0=1 -Iruntime tools/gamelib_entry.c tests/test_violet_gamelib.c -o /tmp/recomp-abi-three
+          /tmp/recomp-abi-three
+  importer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compile dual-game package importer
+        run: dotnet build tools/zaimport -c Release --nologo

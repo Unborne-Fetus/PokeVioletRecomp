@@ -4,9 +4,20 @@
 
 extern const uint64_t main_fn_addrs[], sdk_fn_addrs[], main_fn_count, sdk_fn_count;
 extern const GuestFn main_fn_ptrs[], sdk_fn_ptrs[];
+#ifdef RECOMP_HAS_SUBSDK0
+extern const uint64_t subsdk0_fn_addrs[], subsdk0_fn_count;
+extern const GuestFn subsdk0_fn_ptrs[];
+#endif
 
 GAMELIB_EXPORT const GameLibTables *lasgame_tables(void) {
-    static const GameLibTables t = {GAMELIB_ABI,  GAMELIB_ID,   main_fn_addrs,  sdk_fn_addrs,
-                                    main_fn_ptrs, sdk_fn_ptrs,  &main_fn_count, &sdk_fn_count};
+    static const GameLibTables t = {
+        GAMELIB_ABI, GAMELIB_ID, main_fn_addrs, sdk_fn_addrs,
+        main_fn_ptrs, sdk_fn_ptrs, &main_fn_count, &sdk_fn_count,
+#ifdef RECOMP_HAS_SUBSDK0
+        subsdk0_fn_addrs, subsdk0_fn_ptrs, &subsdk0_fn_count
+#else
+        NULL, NULL, NULL
+#endif
+    };
     return &t;
 }
