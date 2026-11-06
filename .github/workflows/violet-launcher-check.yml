@@ -6,6 +6,9 @@ on:
     paths:
       - "Play Violet.cmd"
       - "tools/violet/run.ps1"
+      - "tools/violet/build.ps1"
+      - "tools/violet/make_local.sh"
+      - "tests/test_violet_make_args.sh"
       - "tools/violet/boot_triage.py"
       - "tests/test_violet_boot_triage.py"
       - ".github/workflows/violet-launcher-check.yml"
@@ -22,6 +25,10 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile(
             (Join-Path $PWD 'tools/violet/run.ps1'), [ref]$null, [ref]$errors) | Out-Null
+          if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/build.ps1'), [ref]$null, [ref]$errors) | Out-Null
           if ($errors.Count) { $errors | Out-String | Write-Error; exit 1 }
       - name: Test launcher preflight with synthetic placeholder files
         shell: pwsh
@@ -45,6 +52,11 @@ jobs:
           $failed = $false
           try { ./tools/violet/run.ps1 -CheckOnly } catch { $failed = $true }
           if (-not $failed) { throw 'CheckOnly failed to detect a missing RomFS.' }
+      - name: Test MSYS2 make argument quoting
+        shell: bash
+        run: |
+          bash -n tools/violet/make_local.sh
+          bash tests/test_violet_make_args.sh
       - name: Test boot log analyzer
         shell: pwsh
         run: python -m unittest discover -s tests -p test_violet_boot_triage.py -v
