@@ -2290,6 +2290,15 @@ extern "C" void launcher_run(const char *root) {
     if (status.empty() && prompts_wanted()) make_prompts(false);  // (set up before the icons existed: made now, aside)
     g_tab = TAB_PLAY, g_focus_play = true, g_changing_folder = false;
     g_mods_changed = true, g_save_scanned = false;
+    // Windows' small startup chooser can open the EXISTING native remapping
+    // page instead of launching directly. No second keybinding storage is used:
+    // Controls -> Configure inputs persists through settings_save/larecomp.ini.
+    // On closing the game, the next launch will still start with the chooser.
+    if (const char *page = getenv("VIOLET_LAUNCHER_OPEN_CONTROLS"); page && !strcmp(page, "1")) {
+        g_tab = TAB_SETTINGS;
+        g_tab_request_ext = 8;  // Controls tab in menu_tabs_draw()
+        menu_tabs_focus(true);
+    }
     bool play = false;
     // LARECOMP_LAUNCHER_SHOT=<frame>[:<page>] (test): save build/launcher.png at that frame and exit; page: mods /
     // saves / about / settings[:<tab>] / askdelete / setup / extracting / fail<1-8> / tip / aspect; :pt or :en after it
