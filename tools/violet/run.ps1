@@ -108,6 +108,21 @@ try {
         if ($exitCode -ne 0) {
             Write-Host "Violet exited with code $exitCode; last diagnostic lines:"
             if (Test-Path -LiteralPath $err) { Get-Content -LiteralPath $err -Tail 35 }
+            # Symbolize the *same* EXE that just crashed. This works with Zig/MinGW PE
+            # exports even when the PDB has no usable DbgHelp/CodeView records.
+            # It must never mask the original error or trigger another rebuild.
+            $symbolizer = Join-Path $PSScriptRoot 'addr2line_crash.py'
+            if ($python -and (Test-Path -LiteralPath $symbolizer -PathType Leaf) -and (Test-Path -LiteralPath $err -PathType Leaf)) {
+                $symbolPath = Join-Path $dir "$attempt-symbols.log"
+                try {
+                    $symbolLines = @(& $python.Source $symbolizer --log $err --exe $exe 2>&1)
+                    $symbolLines | Set-Content -LiteralPath $symbolPath -Encoding UTF8
+                    Write-Host "Native crash symbol candidates saved at: $symbolPath"
+                    $symbolLines | ForEach-Object { Write-Host $_ }
+                } catch {
+                    Write-Warning ("Could not symbolize the native crash: " + $_.Exception.Message)
+                }
+            }
             throw "Native launch or guest boot failed. Send the log at $err to diagnose the next blocker."
         }
     } else {
