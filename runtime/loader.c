@@ -191,6 +191,10 @@ static void relocate(Module *m) {
 }
 
 void loader_load(const char *exefs) {
+    // The loader also runs after an in-process game reboot. Reusing the old
+    // module count would append duplicate entries and overrun g_modules[4].
+    g_nmodules = 0;
+    memset(g_modules, 0, sizeof g_modules);
     char path[1024];
     bool violet = rt_is_violet_exefs(exefs);
     static const struct { const char *name; uint64_t base; } ordinary[] = {
