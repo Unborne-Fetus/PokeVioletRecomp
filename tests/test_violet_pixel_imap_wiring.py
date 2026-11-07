@@ -33,6 +33,12 @@ class FragmentPixelInterpolation(unittest.TestCase):
     def test_msl_opcode_compatibility(self):
         self.assertIn('if (!c->glsl && mode == 2) c->flat_mask |= 1u << at;', TEXT)
 
+    def test_cache_fingerprint_and_rebuild_depend_on_pixel_imap_helper(self):
+        makefile = (Path(__file__).resolve().parents[1] / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("TRANSLATOR_SRCS := runtime/nvn/maxwell/translate.c runtime/nvn/maxwell/shader.h runtime/nvn/maxwell/pixel_imap.h", makefile)
+        self.assertIn("$(B)/rt/nvn/shader_prep.o: $(TRANSLATOR_SRCS)", makefile)
+        self.assertIn("$(B)/rt/nvn/maxwell/translate.o: $(TRANSLATOR_SRCS)", makefile)
+
     def test_cached_glsl_is_versioned(self):
         self.assertIn('"pixel-imap-v1:" SHADER_TRANSLATOR_ID', TEXT)
         self.assertIn('"pixel-imap-v1:" __DATE__', TEXT)
