@@ -148,8 +148,8 @@ def sampled_material_formats(log_text: str) -> dict[str, list[str]]:
     Only the format IDs are retained; guest texture addresses and source
     buffers never enter the shared JSON report.
     """
-    header = re.compile(r"^\\[draw\\] [ae] inst .*?\\bfs=([0-9a-f]+)", re.I)
-    texture = re.compile(r"^\\[draw\\]\\s+tex\\d+:\\s+[0-9a-f]+\\s+\\d+x\\d+\\s+f0x([0-9a-f]+)", re.I)
+    header = re.compile(r"^\[draw\] [ae] inst .*?\bfs=([0-9a-f]+)", re.I)
+    texture = re.compile(r"^\[draw\]\s+tex\d+:\s+[0-9a-f]+\s+\d+x\d+\s+f0x([0-9a-f]+)", re.I)
     formats: dict[str, set[str]] = defaultdict(set)
     active = None
     for line in log_text.splitlines():
