@@ -108,4 +108,14 @@ $zip = "$report.zip"
 Compress-Archive -Path (Join-Path $report '*') -DestinationPath $zip -CompressionLevel Optimal
 Write-Output "F9 capture report: $zip"
 Write-Output "Indexed $($chosen.Count) pass images in $([Math]::Ceiling($chosen.Count / 32)) contact sheets."
-Write-Output 'Attach the ZIP in ChatGPT, not to a public repository. Keep the original build/pass_*.png files for exact follow-up.'
+$reporter = Join-Path $PSScriptRoot 'graphics_local_report.py'
+$python = Get-Command python -ErrorAction SilentlyContinue
+if ($python -and (Test-Path -LiteralPath $reporter)) {
+    try {
+        & $python.Source $reporter --build $build | Out-Null
+        Write-Output 'Private graphics summary refreshed in build/violet-graphics-diagnostics/latest-summary.json'
+    } catch {
+        Write-Warning ("Could not refresh private graphics summary: " + $_.Exception.Message)
+    }
+}
+Write-Output 'No manual ZIP upload is needed. The connected local project bridge can inspect the JSON summary while online.'
