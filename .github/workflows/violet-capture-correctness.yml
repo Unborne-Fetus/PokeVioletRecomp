@@ -14,6 +14,10 @@ on:
       - "tests/test_violet_tegra_reference.c"
       - "runtime/nvn/tegra.c"
       - "runtime/nvn/tegra.h"
+      - "runtime/nvn/vulkan/textures.c"
+      - "runtime/nvn/formats.c"
+      - "tests/test_violet_bgra_formats.c"
+      - "tests/test_violet_bgra_wiring.py"
       - "Makefile"
       - "runtime/nvn/maxwell/translate.c"
       - "runtime/nvn/maxwell/pixel_imap.h"
@@ -34,6 +38,11 @@ jobs:
           /tmp/violet-debug-capture-window
       - name: Verify render-thread capture wiring and reporting
         run: python3 -m unittest discover -s tests -p test_violet_capture_wiring.py -v
+      - name: Verify Nintendo NVN BGR/BGRA byte layouts and color formats
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -O2 tests/test_violet_bgra_formats.c runtime/nvn/formats.c -o /tmp/violet-bgra
+          /tmp/violet-bgra
+          python3 -m unittest discover -s tests -p test_violet_bgra_wiring.py -v
       - name: Test Tegra block-linear texture addressing against BNTX reference
         run: |
           cc -std=c11 -O2 -Wall -Wextra -Werror tests/test_violet_tegra_reference.c runtime/nvn/tegra.c -o /tmp/violet-tegra-reference
