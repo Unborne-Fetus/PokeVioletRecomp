@@ -6,7 +6,8 @@ param(
     [ValidateRange(0,1000)][int]$X = 400,
     [ValidateRange(0,1000)][int]$Y = 780,
     [ValidateRange(2,3)][int]$Frames = 2,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$NoArchive
 )
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -113,9 +114,13 @@ try {
                 Set-Content -LiteralPath (Join-Path $dest 'draw-origin.log') -Encoding UTF8
         }
     }
-    $zip = "$dest.zip"
-    Compress-Archive -Path (Join-Path $dest '*') -DestinationPath $zip -CompressionLevel Optimal
-    Write-Output "F9 per-draw probe report: $zip"
+    if ($NoArchive) {
+        Write-Output "F9 per-draw probe stored locally: $dest"
+    } else {
+        $zip = "$dest.zip"
+        Compress-Archive -Path (Join-Path $dest '*') -DestinationPath $zip -CompressionLevel Optimal
+        Write-Output "F9 per-draw probe archive stored locally: $zip"
+    }
     Write-Output "Captured $saved cropped images from the changed 3D pixel region on frame $($group.Name)."
     Write-Output 'No manual ZIP upload required. A local JSON summary is refreshed automatically after the run.'
     Write-Output 'The local bridge can read the draw-order and shader candidates without sharing images or game files.'
