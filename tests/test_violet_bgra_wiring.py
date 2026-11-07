@@ -23,17 +23,17 @@ class VioletBgraFormatMappings(unittest.TestCase):
         }
         for code, fmt in cases.items():
             with self.subTest(code=code):
-                self.assertRegex(TEX, rf"case 0x{code}: return \\(VkFmt\\)\\{{{fmt}")
-        self.assertRegex(TEX, r"case 0x99: return \\(VkFmt\\)\\{VK_FORMAT_B8G8R8A8_UNORM, 0, 1\\}")
-        self.assertRegex(TEX, r"case 0x9B: return \\(VkFmt\\)\\{VK_FORMAT_B8G8R8A8_SRGB, 0, 1\\}")
+                self.assertRegex(TEX, rf"case 0x{code}: return \(VkFmt\)\{{{fmt}")
+        self.assertRegex(TEX, r"case 0x99: return \(VkFmt\)\{VK_FORMAT_B8G8R8A8_UNORM, 0, 1\}")
+        self.assertRegex(TEX, r"case 0x9B: return \(VkFmt\)\{VK_FORMAT_B8G8R8A8_SRGB, 0, 1\}")
 
     def test_16bit_and_32bit_formats_have_explicit_sizes(self):
         for code in ("95", "96", "97", "98"):
             with self.subTest(code=code):
-                self.assertRegex(FORMATS, rf"\\[0x{code}\\] = C\\(2\\)")
+                self.assertRegex(FORMATS, rf"\[0x{code}\] = C\(2\)")
         for code in ("99", "9A", "9B", "9C"):
             with self.subTest(code=code):
-                self.assertRegex(FORMATS, rf"\\[0x{code}\\] = C\\(4\\)")
+                self.assertRegex(FORMATS, rf"\[0x{code}\] = C\(4\)")
 
 if __name__ == "__main__":
     unittest.main()
