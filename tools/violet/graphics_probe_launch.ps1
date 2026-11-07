@@ -22,6 +22,13 @@ try {
     Write-Output 'At a visibly striped room or floor, move the camera slightly and press F9 once.'
     Write-Output 'The game may pause while probing individual draws. Close the game to package the results.'
     if ($DryRun) { return }
+    # Store only the numeric probe coordinates. The local JSON reporter uses
+    # these to examine the correct part of the frame instead of its old
+    # hard-coded 400,780 floor position (which missed the player's hair).
+    $metaDir = Join-Path $build 'violet-graphics-diagnostics'
+    New-Item -ItemType Directory -Path $metaDir -Force | Out-Null
+    @{ x = $X; y = $Y } | ConvertTo-Json -Compress |
+        Set-Content -LiteralPath (Join-Path $metaDir 'probe-coordinates.json') -Encoding UTF8
     if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) { throw "Native launcher missing: $runner" }
     $since = (Get-Date).AddSeconds(-2)
     $runtimeError = $null
