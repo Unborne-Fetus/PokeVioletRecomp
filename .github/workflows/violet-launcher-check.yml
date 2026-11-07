@@ -10,6 +10,7 @@ on:
       - "tools/violet/graphics_capture_report.ps1"
       - "tools/violet/graphics_capture_launch.ps1"
       - "tools/violet/graphics_probe_launch.ps1"
+      - "tools/violet/graphics_hair_probe_launch.ps1"
       - "runtime/nvn/objects.c"
       - "runtime/ui/launcher.mm"
       - "tools/violet/run.ps1"
@@ -107,6 +108,21 @@ jobs:
           }
           if ($env:LARECOMP_PROBE -or $env:LARECOMP_DEBUG_FRAMES) {
             throw 'Probe launcher leaked temporary environment variables.'
+          }
+          $hairErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Join-Path $PWD 'tools/violet/graphics_hair_probe_launch.ps1'), [ref]$null, [ref]$hairErrors) | Out-Null
+          if ($hairErrors.Count) { throw ($hairErrors | Out-String) }
+          $hair = ./tools/violet/graphics_hair_probe_launch.ps1 -DryRun | Out-String
+          if ($hair -notmatch '320,220' -or $hair -notmatch 'hair-material probe') {
+            throw "Hair probe did not select its local pixel region: $hair"
+          }
+          if (Test-Path 'build/violet-graphics-diagnostics/probe-coordinates.json') {
+            throw 'Hair probe dry-run created a real capture config.'
+          }
+          $legacyHair = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File './tools/violet/graphics_hair_probe_launch.ps1' -DryRun
+          if ($LASTEXITCODE -ne 0 -or ($legacyHair -join ' ') -notmatch '320,220') {
+            throw 'PowerShell 5.1 failed to run the hair pixel probe.'
           }
       - name: Test F9 render-pass contact-sheet archive with synthetic images
         shell: pwsh
