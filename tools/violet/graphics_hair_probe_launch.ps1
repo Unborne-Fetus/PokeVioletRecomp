@@ -16,4 +16,4 @@ Write-Output 'Violet hair-material probe (local only):'
 Write-Output ("  Target at {0}% across and {1}% down the GAME WINDOW." -f ($X / 10), ($Y / 10))
 Write-Output '  Position the player so their hair covers this point, then press F9 once.'
 Write-Output '  Close the game normally; no ZIP or screenshot needs to be sent.'
-& $probe -X $X -Y $Y -Frames 2 -NoArchive -DryRun:$DryRun
+& $probe -X $X -Y $Y -Frames 1 -NoArchive -DryRun:$DryRun
