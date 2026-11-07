@@ -42,6 +42,19 @@ class GraphicsLocalReport(unittest.TestCase):
             self.assertEqual(summary["detail_shader_mode_log"], "20261107-050000-stderr.log")
             self.assertNotIn("the driver's", repr(summary))
 
+    def test_hair_probe_coordinates_follow_local_capture(self):
+        with tempfile.TemporaryDirectory() as temp:
+            build = Path(temp)
+            folder = build / "violet-graphics-diagnostics"
+            folder.mkdir()
+            path = folder / "probe-coordinates.json"
+            path.write_text('{"x": 320, "y": 220}', encoding="utf-8")
+            self.assertEqual(REPORT.probe_coordinates(build), (320, 220))
+            path.write_text('{"x": 5000, "y": -1}', encoding="utf-8")
+            self.assertEqual(REPORT.probe_coordinates(build), (400, 780))
+            path.write_text('invalid-json', encoding="utf-8")
+            self.assertEqual(REPORT.probe_coordinates(build), (400, 780))
+
     def test_probe_draw_reader_reports_shader_ids_without_raw_data(self):
         log = ("[probe] build/probe_4979_01.png: draw 783 target 0 1920x1080 fmt 0: "
                "vs 76e62e9c00 fs 76e6353600 indexed count 3075 inst 1 | vbuf0 abc size 100 stride 24\\n")
