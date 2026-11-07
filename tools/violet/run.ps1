@@ -145,6 +145,23 @@ try {
         if ($LASTEXITCODE) { throw "Violet Recomp exited with code $LASTEXITCODE. Use -CaptureCrash to save logs." }
     }
 } finally {
+    # Produce a small local-only diagnostic summary after gameplay; never
+    # upload captures, logs, game files, keys or saves. Failure here must
+    # never hide the original runtime exception or change the exit status.
+    if ($Play) {
+        $reporter = Join-Path $PSScriptRoot 'graphics_local_report.py'
+        $reportPython = Get-Command python -ErrorAction SilentlyContinue
+        if ($reportPython -and (Test-Path -LiteralPath $reporter -PathType Leaf)) {
+            try {
+                $reportBuild = Join-Path $root 'build'
+                & $reportPython.Source $reporter --build $reportBuild | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "graphics reporter exit code $LASTEXITCODE" }
+                Write-Host 'Violet local graphics summary: build/violet-graphics-diagnostics/latest-summary.json'
+            } catch {
+                Write-Warning ("Local graphics summary unavailable: " + $_.Exception.Message)
+            }
+        }
+    }
     $env:PATH = $oldPath
     [Environment]::SetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', $oldBadLayout, 'Process')
     if ($null -ne $oldOpenControls) { $env:VIOLET_LAUNCHER_OPEN_CONTROLS = $oldOpenControls }
