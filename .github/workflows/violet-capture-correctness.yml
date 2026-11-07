@@ -14,6 +14,7 @@ on:
       - "runtime/nvn/maxwell/translate.c"
       - "runtime/nvn/maxwell/pixel_imap.h"
       - "tests/test_violet_pixel_imap.c"
+      - "tests/test_violet_pixel_imap_translator.c"
       - "tests/test_violet_pixel_imap_wiring.py"
       - ".github/workflows/violet-capture-correctness.yml"
   workflow_dispatch:
@@ -35,6 +36,10 @@ jobs:
         run: |
           cc -std=c11 -O2 -Wall -Wextra -Werror tests/test_violet_pixel_imap.c -o /tmp/violet-imap
           /tmp/violet-imap
+      - name: Exercise synthesized Maxwell IPA fragment through actual GLSL translator
+        run: |
+          cc -std=gnu11 -O1 -Wall -Wextra tests/test_violet_pixel_imap_translator.c runtime/nvn/maxwell/translate.c -lm -o /tmp/violet-pixel-imap-translator
+          /tmp/violet-pixel-imap-translator
       - name: Check GLSL wiring and cache invalidation
         run: python3 -m unittest discover -s tests -p test_violet_pixel_imap_wiring.py -v
       - name: Verify texture views never reuse stale copy aliases
