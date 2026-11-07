@@ -114,14 +114,14 @@ jobs:
             (Join-Path $PWD 'tools/violet/graphics_hair_probe_launch.ps1'), [ref]$null, [ref]$hairErrors) | Out-Null
           if ($hairErrors.Count) { throw ($hairErrors | Out-String) }
           $hair = ./tools/violet/graphics_hair_probe_launch.ps1 -DryRun | Out-String
-          if ($hair -notmatch '320,220' -or $hair -notmatch 'hair-material probe') {
+          if ($hair -notmatch '470,430' -or $hair -notmatch 'hair-material probe') {
             throw "Hair probe did not select its local pixel region: $hair"
           }
           if (Test-Path 'build/violet-graphics-diagnostics/probe-coordinates.json') {
             throw 'Hair probe dry-run created a real capture config.'
           }
           $legacyHair = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File './tools/violet/graphics_hair_probe_launch.ps1' -DryRun
-          if ($LASTEXITCODE -ne 0 -or ($legacyHair -join ' ') -notmatch '320,220') {
+          if ($LASTEXITCODE -ne 0 -or ($legacyHair -join ' ') -notmatch '470,430') {
             throw 'PowerShell 5.1 failed to run the hair pixel probe.'
           }
       - name: Test F9 render-pass contact-sheet archive with synthetic images
