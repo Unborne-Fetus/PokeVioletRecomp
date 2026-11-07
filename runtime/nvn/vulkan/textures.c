@@ -151,10 +151,14 @@ static VkFmt fmt_of(uint32_t f) {
     case 0x93: return (VkFmt){VK_FORMAT_ASTC_12x10_SRGB_BLOCK};
     case 0x94: return (VkFmt){VK_FORMAT_ASTC_12x12_SRGB_BLOCK};
     case 0x95: case 0x96: case 0x97: return (VkFmt){VK_FORMAT_R5G5B5A1_UNORM_PACK16};
-    case 0x98: return (VkFmt){VK_FORMAT_B8G8R8A8_UNORM, 0, 1};
-    case 0x99: return (VkFmt){VK_FORMAT_B8G8R8A8_UNORM};
-    case 0x9A: return (VkFmt){VK_FORMAT_B8G8R8A8_SRGB, 0, 1};
-    case 0x9B: return (VkFmt){VK_FORMAT_B8G8R8A8_SRGB};
+    // NVN's BGRA family is 0x99..0x9C, not 0x98..0x9B.
+    // 0x98 is a 16-bit A1BGR5 format; misreading it as 32-bit BGRA
+    // desynchronizes uploads and can scramble adjacent colored texels.
+    case 0x98: return (VkFmt){VK_FORMAT_A1R5G5B5_UNORM_PACK16};
+    case 0x99: return (VkFmt){VK_FORMAT_B8G8R8A8_UNORM, 0, 1};  // BGRX8
+    case 0x9A: return (VkFmt){VK_FORMAT_B8G8R8A8_UNORM};        // BGRA8
+    case 0x9B: return (VkFmt){VK_FORMAT_B8G8R8A8_SRGB, 0, 1};  // BGRX8_SRGB
+    case 0x9C: return (VkFmt){VK_FORMAT_B8G8R8A8_SRGB};        // BGRA8_SRGB
     default: return (VkFmt){VK_FORMAT_R8G8B8A8_UNORM};
     }
 }
