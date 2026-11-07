@@ -3,8 +3,8 @@
 # generated JSON after the game exits.
 [CmdletBinding()]
 param(
-    [ValidateRange(0,1000)][int]$X = 320,
-    [ValidateRange(0,1000)][int]$Y = 220,
+    [ValidateRange(0,1000)][int]$X = 470,
+    [ValidateRange(0,1000)][int]$Y = 430,
     [switch]$DryRun
 )
 $ErrorActionPreference = 'Stop'
