@@ -12,6 +12,7 @@ import argparse
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 import json
+import math
 from pathlib import Path
 import re
 
@@ -141,6 +142,24 @@ def probe_coordinates(build: Path) -> tuple[int, int]:
     return 400, 780
 
 
+def hue_variation(img) -> float:
+    """Entropy of visible saturated hues in a 64x64 scene crop.
+
+    A solid hair color should have a more concentrated hue distribution than
+    the rainbow material artifact, though mixed background can raise the
+    value. This is a triage metric, never a visual pass/fail assertion.
+    """
+    hsv = img.convert("HSV")
+    bins = [0] * 16
+    for h, sat, val in list(hsv.getdata())[::4]:
+        if sat >= 70 and val >= 40:
+            bins[min(15, h // 16)] += 1
+    count = sum(bins)
+    if count < 12:
+        return 0.0
+    return round(-sum((n / count) * math.log2(n / count) for n in bins if n), 4)
+
+
 def probe_activity(build: Path) -> dict:
     """Find the biggest changed region in a previously captured F9 draw sequence."""
     logs = sorted((build / "violet-launch-logs").glob("*-stderr.log"),
@@ -177,10 +196,12 @@ def probe_activity(build: Path) -> dict:
                 x, y = round(w * x_norm / 1000), round(h * y_norm / 1000)
                 left = max(0, min(w - 64, x - 32))
                 top = max(0, min(h - 64, y - 32))
-                crop = im.crop((left, top, left + 64, top + 64)).convert("L")
+                crop_rgb = im.crop((left, top, left + 64, top + 64)).convert("RGB")
+                crop = crop_rgb.convert("L")
                 blurred = crop.filter(ImageFilter.GaussianBlur(1.25))
                 edge = ImageStat.Stat(ImageChops.difference(crop, blurred)).mean[0]
                 changed = ImageStat.Stat(ImageChops.difference(crop, last)).mean[0] if last else 0
+                hue_entropy = hue_variation(crop_rgb)
                 last = crop.copy()
                 scores.append({
                     "draw": row["draw"],
@@ -188,6 +209,7 @@ def probe_activity(build: Path) -> dict:
                     "fragment_shader": row["fragment_shader"],
                     "pixel_change": round(changed, 3),
                     "edge_energy": round(edge, 3),
+                    "hue_variation": hue_entropy,
                 })
         except (OSError, ValueError):
             continue
@@ -195,7 +217,8 @@ def probe_activity(build: Path) -> dict:
         "available": bool(scores), "frame": frame, "draws_examined": len(scores),
         "probe_coordinates": {"x": x_norm, "y": y_norm},
         "biggest_changes": sorted(scores, key=lambda row: row["pixel_change"], reverse=True)[:8],
-        "note": "Heuristic only; draw order and shader IDs are leads, not proof of the defect.",
+        "highest_hue_variation": sorted(scores, key=lambda row: row["hue_variation"], reverse=True)[:8],
+        "note": "Hue variation is a heuristic on the watched area; background can affect it. Draw IDs are leads, not proof.",
     }
 
 
