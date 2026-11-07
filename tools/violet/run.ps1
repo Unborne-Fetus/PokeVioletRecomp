@@ -41,9 +41,18 @@ if ($CheckOnly) {
 
 $oldPath = $env:PATH
 $oldOpenControls = $env:VIOLET_LAUNCHER_OPEN_CONTROLS
+$oldBadLayout = [Environment]::GetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', 'Process')
 Push-Location $root
 try {
     $env:PATH = $depDir + ';' + $env:PATH
+    # For Violet, a missing vertex attribute is already bound to (0,0,0,1)
+    # via ZERO_BINDING in vulkan/exec.c. The older Z-A workaround that drops
+    # those draws creates missing floors/walls in Violet. Apply this only to
+    # the Violet launcher, and honor any explicit developer override.
+    if ($null -eq $oldBadLayout) {
+        [Environment]::SetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', '0', 'Process')
+        Write-Host 'Violet vertex compatibility: using constant defaults for missing attributes.'
+    }
     if ($OpenControls) { $env:VIOLET_LAUNCHER_OPEN_CONTROLS = '1' }
     else { Remove-Item Env:VIOLET_LAUNCHER_OPEN_CONTROLS -ErrorAction SilentlyContinue }
     if ($RebuildRuntime) {
@@ -137,6 +146,7 @@ try {
     }
 } finally {
     $env:PATH = $oldPath
+    [Environment]::SetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', $oldBadLayout, 'Process')
     if ($null -ne $oldOpenControls) { $env:VIOLET_LAUNCHER_OPEN_CONTROLS = $oldOpenControls }
     else { Remove-Item Env:VIOLET_LAUNCHER_OPEN_CONTROLS -ErrorAction SilentlyContinue }
     Pop-Location
