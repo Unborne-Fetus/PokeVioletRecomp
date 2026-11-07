@@ -46,6 +46,8 @@ def summarize_logs(folder: Path, count: int = 25) -> dict:
     items = sorted(folder.glob("*-stderr.log"), key=lambda p: p.stat().st_mtime_ns)[-count:]
     total_vertex_skips = total_failures = 0
     faults = []
+    detail_shader_mode = "not_recorded"
+    detail_shader_mode_log = None
     offenders: Counter[str] = Counter()
     for file in items:
         # Avoid reading runaway multi-gigabyte debug output.
@@ -53,6 +55,18 @@ def summarize_logs(folder: Path, count: int = 25) -> dict:
             continue
         saw_fault = False
         for line in file.read_text(encoding="utf-8", errors="replace").splitlines():
+            # This is the active runtime path, NOT just a Vulkan capability flag.
+            # Keep only the known option value; no raw log text or private paths.
+            if line.startswith("[vk] fragment shaders' own derivatives:"):
+                detail_shader_mode_log = file.name
+                if "quads kept together (quad control)" in line:
+                    detail_shader_mode = "full_quad_control"
+                elif "the hardware's" in line:
+                    detail_shader_mode = "hardware_derivatives"
+                elif "quad swaps" in line:
+                    detail_shader_mode = "quad_swaps"
+                else:
+                    detail_shader_mode = "other"
             match = VERTEX.match(line)
             if match:
                 total_vertex_skips += 1
@@ -73,6 +87,8 @@ def summarize_logs(folder: Path, count: int = 25) -> dict:
             {"shader": shader, "messages": count} for shader, count in offenders.most_common(6)
         ],
         "shader_or_pipeline_failure_messages": total_failures,
+        "detail_shader_mode": detail_shader_mode,
+        "detail_shader_mode_log": detail_shader_mode_log,
     }
 
 
