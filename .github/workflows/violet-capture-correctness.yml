@@ -11,6 +11,9 @@ on:
       - "tests/test_violet_debug_capture_window.c"
       - "tests/test_violet_capture_wiring.py"
       - "tests/test_violet_texture_alias_cache.py"
+      - "tests/test_violet_tegra_reference.c"
+      - "runtime/nvn/tegra.c"
+      - "runtime/nvn/tegra.h"
       - "Makefile"
       - "runtime/nvn/maxwell/translate.c"
       - "runtime/nvn/maxwell/pixel_imap.h"
@@ -31,6 +34,10 @@ jobs:
           /tmp/violet-debug-capture-window
       - name: Verify render-thread capture wiring and reporting
         run: python3 -m unittest discover -s tests -p test_violet_capture_wiring.py -v
+      - name: Test Tegra block-linear texture addressing against BNTX reference
+        run: |
+          cc -std=c11 -O2 -Wall -Wextra -Werror tests/test_violet_tegra_reference.c runtime/nvn/tegra.c -o /tmp/violet-tegra-reference
+          /tmp/violet-tegra-reference
       - name: Compile Maxwell fragment shader translator
         run: clang -std=gnu11 -Wall -Wextra -fsyntax-only runtime/nvn/maxwell/translate.c
       - name: Test NVIDIA SPH PixelImap modes
