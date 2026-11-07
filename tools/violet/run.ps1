@@ -42,7 +42,6 @@ if ($CheckOnly) {
 $oldPath = $env:PATH
 $oldOpenControls = $env:VIOLET_LAUNCHER_OPEN_CONTROLS
 $oldBadLayout = [Environment]::GetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', 'Process')
-$oldQuadControl = [Environment]::GetEnvironmentVariable('LARECOMP_SHADER_QUAD_CONTROL', 'Process')
 Push-Location $root
 try {
     $env:PATH = $depDir + ';' + $env:PATH
@@ -53,18 +52,6 @@ try {
     if ($null -eq $oldBadLayout) {
         [Environment]::SetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', '0', 'Process')
         Write-Host 'Violet vertex compatibility: using constant defaults for missing attributes.'
-    }
-    # Violet's hair, eyes and other fine-detail fragment materials use Maxwell
-    # SHFL/FSWZADD quad-neighbour derivatives. On this PC Vulkan advertises
-    # full-quads + maximal reconvergence, but the shared renderer defaults to
-    # bare quad swaps on discrete GPUs. Full quad participation avoids undefined
-    # helper-lane values on triangle edges, which appear as speckles in hair.
-    # The renderer itself checks extension support; devices without it keep
-    # their original path. Shader cache keys already encode this mode.
-    # Leave explicit user/developer overrides unchanged (set to 0 to A/B).
-    if ($null -eq $oldQuadControl) {
-        [Environment]::SetEnvironmentVariable('LARECOMP_SHADER_QUAD_CONTROL', '1', 'Process')
-        Write-Host 'Violet fine-detail shaders: use full-quad interpolation when GPU supports it.'
     }
     if ($OpenControls) { $env:VIOLET_LAUNCHER_OPEN_CONTROLS = '1' }
     else { Remove-Item Env:VIOLET_LAUNCHER_OPEN_CONTROLS -ErrorAction SilentlyContinue }
@@ -177,7 +164,6 @@ try {
     }
     $env:PATH = $oldPath
     [Environment]::SetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', $oldBadLayout, 'Process')
-    [Environment]::SetEnvironmentVariable('LARECOMP_SHADER_QUAD_CONTROL', $oldQuadControl, 'Process')
     if ($null -ne $oldOpenControls) { $env:VIOLET_LAUNCHER_OPEN_CONTROLS = $oldOpenControls }
     else { Remove-Item Env:VIOLET_LAUNCHER_OPEN_CONTROLS -ErrorAction SilentlyContinue }
     Pop-Location
