@@ -27,7 +27,7 @@ class VioletVertexLayoutFallback(unittest.TestCase):
         self.assertIn('128 * (uint64_t)quad_control_on()', shader)
         renderer = EXEC
         self.assertIn('maxwell_quad_control_ok = g_vk.quad_control;', renderer)
-        self.assertIn('return maxwell_quad_control_ok &&', shader)
+        self.assertIn('on = maxwell_quad_control_ok &&', shader)
 
     def test_violet_only_default_is_reversible(self):
         self.assertIn("$oldBadLayout = [Environment]::GetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', 'Process')", RUNNER)
