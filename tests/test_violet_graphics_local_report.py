@@ -42,6 +42,19 @@ class GraphicsLocalReport(unittest.TestCase):
             self.assertEqual(summary["detail_shader_mode_log"], "20261107-050000-stderr.log")
             self.assertNotIn("the driver's", repr(summary))
 
+    def test_hair_hue_metric_detects_multi_colour_artifact(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow is optional for graphics diagnostics")
+        solid = Image.new("RGB", (64, 64), (26, 170, 70))
+        rainbow = solid.copy()
+        colours = [(200, 15, 30), (35, 65, 215), (200, 90, 190), (230, 210, 25)]
+        for y in range(64):
+            for x in range(64):
+                rainbow.putpixel((x, y), colours[(x // 16) % 4])
+        self.assertLess(REPORT.hue_variation(solid), REPORT.hue_variation(rainbow))
+
     def test_hair_probe_coordinates_follow_local_capture(self):
         with tempfile.TemporaryDirectory() as temp:
             build = Path(temp)
