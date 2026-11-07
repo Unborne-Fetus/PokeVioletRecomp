@@ -142,6 +142,27 @@ def probe_coordinates(build: Path) -> tuple[int, int]:
     return 400, 780
 
 
+def sampled_material_formats(log_text: str) -> dict[str, list[str]]:
+    """Map fragment shaders to NVN texture formats in their captured draws.
+
+    Only the format IDs are retained; guest texture addresses and source
+    buffers never enter the shared JSON report.
+    """
+    header = re.compile(r"^\\[draw\\] [ae] inst .*?\\bfs=([0-9a-f]+)", re.I)
+    texture = re.compile(r"^\\[draw\\]\\s+tex\\d+:\\s+[0-9a-f]+\\s+\\d+x\\d+\\s+f0x([0-9a-f]+)", re.I)
+    formats: dict[str, set[str]] = defaultdict(set)
+    active = None
+    for line in log_text.splitlines():
+        match = header.match(line)
+        if match:
+            active = match.group(1).lower()
+            continue
+        tex = texture.match(line)
+        if active and tex:
+            formats[active].add("0x" + tex.group(1).lower())
+    return {shader: sorted(values) for shader, values in formats.items()}
+
+
 def hue_variation(img) -> float:
     """Entropy of visible saturated hues in a 64x64 scene crop.
 
@@ -177,6 +198,7 @@ def probe_activity(build: Path) -> dict:
         from PIL import Image, ImageChops, ImageFilter, ImageStat
     except ImportError:
         return {"available": False, "reason": "Pillow not installed"}
+    formats = sampled_material_formats(log.read_text(encoding="utf-8", errors="replace"))
     frame = Counter(row["frame"] for row in rows).most_common(1)[0][0]
     chosen = sorted((row for row in rows if row["frame"] == frame), key=lambda row: row["shot"])
     x_norm, y_norm = probe_coordinates(build)
@@ -207,6 +229,7 @@ def probe_activity(build: Path) -> dict:
                     "draw": row["draw"],
                     "vertex_shader": row["vertex_shader"],
                     "fragment_shader": row["fragment_shader"],
+                    "sampled_nvn_formats": formats.get(row["fragment_shader"].lower(), []),
                     "pixel_change": round(changed, 3),
                     "edge_energy": round(edge, 3),
                     "hue_variation": hue_entropy,
