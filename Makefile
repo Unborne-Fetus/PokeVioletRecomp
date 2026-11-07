@@ -198,6 +198,7 @@ TRANSLATOR_SRCS := runtime/nvn/maxwell/translate.c runtime/nvn/maxwell/shader.h 
 TRANSLATOR_ID := $(shell cat $(TRANSLATOR_SRCS) | (shasum -a 256 2>/dev/null || sha256sum) | cut -c1-12)
 $(B)/rt/nvn/shader_prep.o: $(TRANSLATOR_SRCS)
 $(B)/rt/nvn/shader_prep.o: RTFLAGS += -DSHADER_TRANSLATOR_ID='"$(TRANSLATOR_ID)"'
+$(B)/rt/nvn/maxwell/translate.o: $(TRANSLATOR_SRCS)
 $(B)/rt/nvn/maxwell/translate.o: RTFLAGS += -DSHADER_TRANSLATOR_ID='"$(TRANSLATOR_ID)"'  # (its disk cache's stamp)
 
 $(B)/rt/%.o: runtime/%.cpp $(RT_HDRS)
