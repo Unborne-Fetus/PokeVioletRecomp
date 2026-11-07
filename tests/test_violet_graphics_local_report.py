@@ -24,6 +24,24 @@ class GraphicsLocalReport(unittest.TestCase):
             self.assertEqual(summary["skipped_vertex_draw_messages"], 1)
             self.assertEqual(summary["most_skipped_vertex_shaders"][0]["shader"], "7442117000")
 
+    def test_new_hair_quad_path_is_reported_without_sensitive_logs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            p = Path(temp)
+            (p / "20261107-040000-stderr.log").write_text(
+                "[vk] fragment shaders' own derivatives: quad swaps (LARECOMP_SHADER_QUAD_CONTROL, "
+                "LARECOMP_SHADER_QUAD_DERIV); the driver's quad control and maximal reconvergence: yes; "
+                "quads in step through the iris loop: yes (LARECOMP_SHADER_QUAD_LOCKSTEP)\\n",
+                encoding="utf-8")
+            (p / "20261107-050000-stderr.log").write_text(
+                "[vk] fragment shaders' own derivatives: quad swaps in full quads, "
+                "quads kept together (quad control); the driver's quad control and maximal "
+                "reconvergence: yes; quads in step through the iris loop: yes\\n",
+                encoding="utf-8")
+            summary = REPORT.summarize_logs(p)
+            self.assertEqual(summary["detail_shader_mode"], "full_quad_control")
+            self.assertEqual(summary["detail_shader_mode_log"], "20261107-050000-stderr.log")
+            self.assertNotIn("the driver's", repr(summary))
+
     def test_probe_draw_reader_reports_shader_ids_without_raw_data(self):
         log = ("[probe] build/probe_4979_01.png: draw 783 target 0 1920x1080 fmt 0: "
                "vs 76e62e9c00 fs 76e6353600 indexed count 3075 inst 1 | vbuf0 abc size 100 stride 24\\n")
