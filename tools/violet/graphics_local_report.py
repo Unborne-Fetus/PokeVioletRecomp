@@ -128,6 +128,19 @@ def parse_probe_lines(text: str) -> list[dict]:
     return rows
 
 
+def probe_coordinates(build: Path) -> tuple[int, int]:
+    """Read only the explicitly recorded F9 target, using safe numeric bounds."""
+    path = build / "violet-graphics-diagnostics" / "probe-coordinates.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+        x, y = int(data["x"]), int(data["y"])
+        if 0 <= x <= 1000 and 0 <= y <= 1000:
+            return x, y
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        pass
+    return 400, 780
+
+
 def probe_activity(build: Path) -> dict:
     """Find the biggest changed region in a previously captured F9 draw sequence."""
     logs = sorted((build / "violet-launch-logs").glob("*-stderr.log"),
@@ -147,6 +160,7 @@ def probe_activity(build: Path) -> dict:
         return {"available": False, "reason": "Pillow not installed"}
     frame = Counter(row["frame"] for row in rows).most_common(1)[0][0]
     chosen = sorted((row for row in rows if row["frame"] == frame), key=lambda row: row["shot"])
+    x_norm, y_norm = probe_coordinates(build)
     last = None
     scores = []
     for row in chosen[:80]:
@@ -158,8 +172,9 @@ def probe_activity(build: Path) -> dict:
                 w, h = im.size
                 if w < 64 or h < 64:
                     continue
-                # Default probe is 400,780 (normalized); no full-frame image is exported.
-                x, y = round(w * .4), round(h * .78)
+                # Match the F9 target: the old hard-coded floor position
+                # missed the hair completely when the head was being probed.
+                x, y = round(w * x_norm / 1000), round(h * y_norm / 1000)
                 left = max(0, min(w - 64, x - 32))
                 top = max(0, min(h - 64, y - 32))
                 crop = im.crop((left, top, left + 64, top + 64)).convert("L")
@@ -178,6 +193,7 @@ def probe_activity(build: Path) -> dict:
             continue
     return {
         "available": bool(scores), "frame": frame, "draws_examined": len(scores),
+        "probe_coordinates": {"x": x_norm, "y": y_norm},
         "biggest_changes": sorted(scores, key=lambda row: row["pixel_change"], reverse=True)[:8],
         "note": "Heuristic only; draw order and shader IDs are leads, not proof of the defect.",
     }
