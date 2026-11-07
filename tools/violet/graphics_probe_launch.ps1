@@ -110,6 +110,8 @@ try {
     Compress-Archive -Path (Join-Path $dest '*') -DestinationPath $zip -CompressionLevel Optimal
     Write-Output "F9 per-draw probe report: $zip"
     Write-Output "Captured $saved cropped images from the changed 3D pixel region on frame $($group.Name)."
+    Write-Output 'No manual ZIP upload required. A local JSON summary is refreshed automatically after the run.'
+    Write-Output 'The local bridge can read the draw-order and shader candidates without sharing images or game files.'
     if ($runtimeError) { throw $runtimeError }
 } finally {
     [Environment]::SetEnvironmentVariable('LARECOMP_PROBE', $previousProbe, 'Process')
