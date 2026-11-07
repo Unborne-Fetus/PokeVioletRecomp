@@ -174,9 +174,15 @@ def summarize(build: Path = ROOT / "build") -> dict:
     if files:
         candidates = [p for p in files if p.stem.endswith("_032")]
         frame_pass = (candidates or [files[len(files) // 2]])[0]
+    capture_modified = (
+        datetime.fromtimestamp(max(p.stat().st_mtime for p in files), tz=timezone.utc).isoformat()
+        if files else None
+    )
     output = {
         "format_version": 1,
         "local_only": True,
+        "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+        "capture_last_modified_utc": capture_modified,
         "capture_frame": frame,
         "capture_pass_count": len(files),
         "scene_candidate_pass": frame_pass.name if frame_pass else None,
