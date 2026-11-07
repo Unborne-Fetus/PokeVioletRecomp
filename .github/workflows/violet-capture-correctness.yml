@@ -11,6 +11,7 @@ on:
       - "tests/test_violet_debug_capture_window.c"
       - "tests/test_violet_capture_wiring.py"
       - "tests/test_violet_texture_alias_cache.py"
+      - "Makefile"
       - "runtime/nvn/maxwell/translate.c"
       - "runtime/nvn/maxwell/pixel_imap.h"
       - "tests/test_violet_pixel_imap.c"
