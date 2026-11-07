@@ -52,3 +52,13 @@ Unverified: precise offending 3D draw, whether source compressed textures alread
 - Linux CI for the full Maxwell source syntax, pure-C SPH mode tests, and source wiring/cache checks passed in run `42312935121`.
 - **Outstanding:** The corrected native Windows binary has not been launched or visually inspected. This is a plausible source-level graphics fix, **not** confirmation the scene striping has disappeared. Avoid making users provide repeated screenshots; test with existing imagery/logs first.
 
+
+
+## 2026-11-06 follow-up: persisted striping after shader rebuild
+
+- User confirmed the latest native-rebuild attempt still shows stripes. The PixelImap correction and shader-cache rebuild are not sufficient.
+- Reopened the private local F9 capture using the connected Autopilot Python test task (without uploading game assets): 2,086 `[draw]` records, 103 `[pass]` records and 152 `[vtxstate]` lines. The initial full-scene `pass_4979_032.png` is the first relevant 1920x1080 color scene, following the preceding black/offscreen passes. It is already corrupted.
+- The intermediate pass dump's metadata immediately following that pass references scene VS `76e62e9c00`, FS `76e6353600` with NVN BC7 material samplers. The capture contains many subsequent draws; this is NOT proof that those two shader addresses create the stripe. Use the F9 per-draw screen-point probe to identify a culprit rather than guessing from adjacent log records.
+- Most ordinary launch logs only contain a startup message `GPU address binding report: on (a device fault names ...)`. That message **is not a device fault**. The actual `[vk] device fault` and device loss in the sampled 23 local logs came from `20261106-221717-1125923-stderr.log`, the extended F9 capture. Do not misattribute that to normal gameplay.
+- Added a pure-C `tests/test_violet_tegra_reference.c` comparing the active GOB importer to the independent BNTX offset formula across 7,500 cases (odd widths/heights, partial GOBs, 1–16 bytes per block, varying block height). The test passes in CI. This rules out the tested generic GOB byte-placement error, **not** incorrect source texture descriptor metadata or uploads.
+- The graphics problem remains **unresolved**. Next actionable discriminator: run `tools/violet/graphics_probe_launch.ps1` in the striped scene, press F9 once, and use `draw-origin.log` alongside consecutively changed crops to isolate the first material draw adding the stripes. The diagnostic should stay local/private.
