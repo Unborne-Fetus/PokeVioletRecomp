@@ -14,6 +14,8 @@ on:
       - "runtime/ui/launcher.mm"
       - "tools/violet/run.ps1"
       - "tests/test_violet_layout_fallback.py"
+      - "tools/violet/graphics_local_report.py"
+      - "tests/test_violet_graphics_local_report.py"
       - "tools/violet/build.ps1"
       - "tools/violet/make_local.sh"
       - "tools/violet/symbolize_crash.ps1"
@@ -211,6 +213,9 @@ jobs:
       - name: Check Violet missing-attribute fallback is safe and reversible
         shell: pwsh
         run: python -m unittest discover -s tests -p test_violet_layout_fallback.py -v
+      - name: Verify no-ZIP graphics summary works without private game files
+        shell: pwsh
+        run: python -m unittest discover -s tests -p test_violet_graphics_local_report.py -v
       - name: Test PE and MinGW DWARF crash symbolizer
         shell: pwsh
         run: python -m unittest discover -s tests -p test_violet_addr2line_crash.py -v
