@@ -42,6 +42,19 @@ class GraphicsLocalReport(unittest.TestCase):
             self.assertEqual(summary["detail_shader_mode_log"], "20261107-050000-stderr.log")
             self.assertNotIn("the driver's", repr(summary))
 
+    def test_hair_material_report_only_contains_texture_formats(self):
+        trace = (
+            "[draw] e inst 1 mode 4 count 100 prog vs=aaaa fs=1234 | rt 8 1024x1024\\n"
+            "[draw]   tex0: 000002114159C7E0 256x256 f0x4e lv 9 -> 256x256\\n"
+            "[draw]   tex1: 000002114159C8B0 128x128 f0x4b lv 8 -> 128x128\\n"
+            "[draw] e inst 1 mode 4 count 55 prog vs=bbbb fs=abcd | rt 8 1024x1024\\n"
+            "[draw]   tex0: 000002114159C9F0 32x32 f0x49 lv 1 -> 32x32\\n"
+        )
+        formats = REPORT.sampled_material_formats(trace)
+        self.assertEqual(formats["1234"], ["0x4b", "0x4e"])
+        self.assertEqual(formats["abcd"], ["0x49"])
+        self.assertNotIn("000002114159C7E0", repr(formats))
+
     def test_hair_hue_metric_detects_multi_colour_artifact(self):
         try:
             from PIL import Image
