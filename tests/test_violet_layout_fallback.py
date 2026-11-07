@@ -16,18 +16,11 @@ class VioletVertexLayoutFallback(unittest.TestCase):
         self.assertIn('ENV("LARECOMP_SKIP_BAD_LAYOUT")', EXEC)
         self.assertIn("if (on && st.nattrib <= 1 && (pr->vi->attr_mask & ~1u))", EXEC)
 
-    def test_hair_quad_control_default_is_supported_and_reversible(self):
-        self.assertIn("$oldQuadControl = [Environment]::GetEnvironmentVariable('LARECOMP_SHADER_QUAD_CONTROL', 'Process')", RUNNER)
-        self.assertIn("if ($null -eq $oldQuadControl)", RUNNER)
-        self.assertIn("[Environment]::SetEnvironmentVariable('LARECOMP_SHADER_QUAD_CONTROL', '1', 'Process')", RUNNER)
-        self.assertIn("[Environment]::SetEnvironmentVariable('LARECOMP_SHADER_QUAD_CONTROL', $oldQuadControl, 'Process')", RUNNER)
+    def test_hair_quad_control_is_not_forced_for_violet(self):
+        self.assertNotIn("LARECOMP_SHADER_QUAD_CONTROL", RUNNER)
         shader = (ROOT / "runtime/nvn/maxwell/translate.c").read_text(encoding="utf-8")
-        self.assertIn('if (feeds && quad_control_on()) c->full_quads = true;', shader)
-        self.assertIn('if (c->full_quads) sp(&s, "layout(full_quads) in;', shader)
-        self.assertIn('128 * (uint64_t)quad_control_on()', shader)
-        renderer = EXEC
-        self.assertIn('maxwell_quad_control_ok = g_vk.quad_control;', renderer)
         self.assertIn('on = maxwell_quad_control_ok &&', shader)
+        self.assertIn('128 * (uint64_t)quad_control_on()', shader)
 
     def test_violet_only_default_is_reversible(self):
         self.assertIn("$oldBadLayout = [Environment]::GetEnvironmentVariable('LARECOMP_SKIP_BAD_LAYOUT', 'Process')", RUNNER)
