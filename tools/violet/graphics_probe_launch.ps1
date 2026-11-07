@@ -5,7 +5,7 @@
 param(
     [ValidateRange(0,1000)][int]$X = 400,
     [ValidateRange(0,1000)][int]$Y = 780,
-    [ValidateRange(2,3)][int]$Frames = 2,
+    [ValidateRange(1,3)][int]$Frames = 2,
     [switch]$DryRun,
     [switch]$NoArchive
 )
@@ -19,7 +19,8 @@ $probe = "$X,$Y"
 try {
     [Environment]::SetEnvironmentVariable('LARECOMP_PROBE', $probe, 'Process')
     [Environment]::SetEnvironmentVariable('LARECOMP_DEBUG_FRAMES', [string]$Frames, 'Process')
-    Write-Output "Violet F9 per-draw probe: ($probe) in 0-1000 normalized scene coordinates; $Frames frames"
+    $frameWord = if ($Frames -eq 1) { 'frame' } else { 'frames' }
+    Write-Output "Violet F9 per-draw probe: ($probe) in 0-1000 normalized scene coordinates; $Frames $frameWord"
     Write-Output 'At a visibly striped room or floor, move the camera slightly and press F9 once.'
     Write-Output 'The game may pause while probing individual draws. Close the game to package the results.'
     if ($DryRun) { return }
