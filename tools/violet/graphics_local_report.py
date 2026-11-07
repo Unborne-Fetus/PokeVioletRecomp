@@ -22,6 +22,11 @@ FAULT = re.compile(r"^\[vk\] device fault\s*:", re.I)
 SHADER_FAILURE = re.compile(r"\b(?:shader compile failed|SPIR-V validation failed|pipeline creation failed)\b", re.I)
 
 
+PROBE_LINE = re.compile(
+    r"^\[probe\] build/(probe_(\d+)_(\d+)\.png): draw (\d+).*?\bvs ([0-9a-f]+) fs ([0-9a-f]+)\b", re.I
+)
+
+
 def scene_frame_files(build: Path) -> tuple[str | None, list[Path]]:
     """Prefer a substantial complete frame, not a newer empty two-pass capture."""
     by_frame: dict[str, list[Path]] = defaultdict(list)
@@ -95,6 +100,73 @@ def _image_stats(path: Path) -> dict:
         }
 
 
+def parse_probe_lines(text: str) -> list[dict]:
+    """Only retain draw sequence numbers and shader IDs, not private buffers."""
+    rows = []
+    for line in text.splitlines():
+        match = PROBE_LINE.match(line)
+        if match:
+            filename, frame, shot, draw, vs, fs = match.groups()
+            rows.append({"filename": filename, "frame": frame, "shot": int(shot),
+                         "draw": int(draw), "vertex_shader": vs, "fragment_shader": fs})
+    return rows
+
+
+def probe_activity(build: Path) -> dict:
+    """Find the biggest changed region in a previously captured F9 draw sequence."""
+    logs = sorted((build / "violet-launch-logs").glob("*-stderr.log"),
+                  key=lambda p: p.stat().st_mtime_ns, reverse=True)
+    rows = []
+    for log in logs[:25]:
+        if log.stat().st_size > 30 * 1024 * 1024:
+            continue
+        rows = parse_probe_lines(log.read_text(encoding="utf-8", errors="replace"))
+        if rows:
+            break
+    if not rows:
+        return {"available": False, "reason": "No F9 per-draw probe capture yet"}
+    try:
+        from PIL import Image, ImageChops, ImageFilter, ImageStat
+    except ImportError:
+        return {"available": False, "reason": "Pillow not installed"}
+    frame = Counter(row["frame"] for row in rows).most_common(1)[0][0]
+    chosen = sorted((row for row in rows if row["frame"] == frame), key=lambda row: row["shot"])
+    last = None
+    scores = []
+    for row in chosen[:80]:
+        p = build / row["filename"]
+        if not p.is_file():
+            continue
+        try:
+            with Image.open(p) as im:
+                w, h = im.size
+                if w < 64 or h < 64:
+                    continue
+                # Default probe is 400,780 (normalized); no full-frame image is exported.
+                x, y = round(w * .4), round(h * .78)
+                left = max(0, min(w - 64, x - 32))
+                top = max(0, min(h - 64, y - 32))
+                crop = im.crop((left, top, left + 64, top + 64)).convert("L")
+                blurred = crop.filter(ImageFilter.GaussianBlur(1.25))
+                edge = ImageStat.Stat(ImageChops.difference(crop, blurred)).mean[0]
+                changed = ImageStat.Stat(ImageChops.difference(crop, last)).mean[0] if last else 0
+                last = crop.copy()
+                scores.append({
+                    "draw": row["draw"],
+                    "vertex_shader": row["vertex_shader"],
+                    "fragment_shader": row["fragment_shader"],
+                    "pixel_change": round(changed, 3),
+                    "edge_energy": round(edge, 3),
+                })
+        except (OSError, ValueError):
+            continue
+    return {
+        "available": bool(scores), "frame": frame, "draws_examined": len(scores),
+        "biggest_changes": sorted(scores, key=lambda row: row["pixel_change"], reverse=True)[:8],
+        "note": "Heuristic only; draw order and shader IDs are leads, not proof of the defect.",
+    }
+
+
 def summarize(build: Path = ROOT / "build") -> dict:
     frame, files = scene_frame_files(build)
     logs = summarize_logs(build / "violet-launch-logs")
@@ -110,6 +182,7 @@ def summarize(build: Path = ROOT / "build") -> dict:
         "scene_candidate_pass": frame_pass.name if frame_pass else None,
         "scene_candidate_statistics": _image_stats(frame_pass) if frame_pass else None,
         "launch_logs": logs,
+        "probe_draw_activity": probe_activity(build),
         "note": "Statistics do not prove graphics are fixed. Compare the same scene after each code change.",
     }
     return output
